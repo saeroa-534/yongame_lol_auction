@@ -1,49 +1,108 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
-    <head>
-        <meta charset="utf-8" />   
-        <!-- 모바일에서 화면 폭을 기기 폭에 맞추고, 초기 확대 비율을 1로 설정 -->
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>연낳대 시즌6 경매 시스템</title>
-    </head>
-    <body>
-        <h1> 연낳대 시즌6 경매 시스템 제목</h1>
-        <!--
-            id는 나중에 js에서 document.querySelector()를 통해 요소를 찾기 위해 붙임
-            placeholder는 입력란에 희미하게 표시되는 안내 문구
-         -->
-        <input id="name" placeholder="이름">
-        <input id="price" type="number" placeholder="입찰가">
-        <button id =btn></button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>연낳대 경매 테스트</title>
+  </head>
+  <body>
+    <h1>연낳대 경매 테스트</h1>
 
-        <!-- pre는 preformatted text의 약자로, 줄바꿈/공백이 그대로 유지. 여기서는 로그표시용으로 사용됨 -->
-        <pre id="log"></pre>
+    <div id="status"></div>
+    <div><b>현재 대상:</b> <span id="item">-</span></div>
+    <div><b>최고가:</b> <span id="highest">-</span></div>
+    <div><b>남은 시간:</b> <span id="timer">-</span></div>
 
-        <!-- 서버에서 Socket.io를 켜면 자동으로 제공되는 클라이언트 스크립트 -->
-        <!-- 브라우저가 이 경로로 요청하면 Socket.io가 js파일을 제공 -->
-        <script src="/socket.io/socket.io.js"></script>
+    <hr />
 
-        <!-- 메인 스크립트 -->
-        <script>
-            const socket = io(); // 방금 로드한 socket.io를 연결시도
+    <input id="name" placeholder="이름" />
+    <input id="price" type="number" placeholder="입찰가" />
+    <button id="btn">입찰</button>
 
-            const log = document.querySelector("#log"); // 로그 표시용 <pre> 요소
+    <div id="msg" style="margin-top:8px;"></div>
 
-            // 로그를 위로 쌓는 함수
-            function addLine(line) {
-                log.textContent = line + "\n" + log.textContent;
-            }
-            
-            document.querySelector('#btn').addEventListener('click', () => {
-                const name = document.querySelector('#name').value || '익명';   // 입력값이 없으면 '익명'으로 처리
-                const price = Number(document.querySelector('#price').value || 0);  // 입력값이 없으면 0으로 처리
-                socket.emit("bid", {name, price});  // 'bid' 이벤트를 서버로 전송
-            });
+    <hr />
 
-            // 서버가 io.emit("bid", data)로 뿌린 이벤트를 수신
-            // JSON.stringify(data)는 data 객체를 JSON 문자열로 변환
-            socket.on("bid", (data) => addLine(JSON.stringify(data)));
-        </script>
+    <div id="admin" style="display:none;">
+      <h3>관리자</h3>
+      <button id="start">경매 시작</button>
+      <button id="end">강제 마감(낙찰/유찰 처리)</button>
+      <button id="reset">리셋</button>
+      <p>관리자 화면은 <code>/?admin=1</code> 로 접속하면 보입니다.</p>
+    </div>
 
-    </body>
+    <h3>낙찰 결과</h3>
+    <pre id="results"></pre>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const isAdmin = params.get("admin") === "1";
+
+      const socket = io({ auth: { role: isAdmin ? "admin" : "viewer" } });
+
+      const $ = (sel) => document.querySelector(sel);
+      const status = $("#status");
+      const item = $("#item");
+      const highest = $("#highest");
+      const timer = $("#timer");
+      const results = $("#results");
+      const msg = $("#msg");
+
+      if (isAdmin) $("#admin").style.display = "block";
+
+      function setMsg(text) {
+        msg.textContent = text;
+        setTimeout(() => (msg.textContent = ""), 2000);
+      }
+
+      function renderState(s) {
+        status.textContent = `phase=${s.phase} (${s.index + 1}/${s.total})`;
+        item.textContent = s.item ?? "(끝)";
+        highest.textContent = s.highestBidder
+          ? `${s.highestBidder} - ${s.highestBid}`
+          : "(아직 없음)";
+
+        // 결과
+        results.textContent = (s.results || [])
+          .map((r, i) => `${i + 1}. ${r.item} / ${r.winner ?? "유찰"} / ${r.price ?? 0}`)
+          .join("\n");
+
+        // 타이머(클라에서 표시만)
+        if (s.phase === "running" && s.endsAt) {
+          const leftMs = Math.max(0, s.endsAt - Date.now());
+          timer.textContent = `${Math.ceil(leftMs / 1000)}초`;
+        } else {
+          timer.textContent = "-";
+        }
+      }
+
+      // 매 200ms마다 타이머 표시 갱신(서버 state는 그대로, 표시만 갱신)
+      let lastState = null;
+      setInterval(() => {
+        if (lastState) renderState(lastState);
+      }, 200);
+
+      socket.on("state", (s) => {
+        lastState = s;
+        renderState(s);
+      });
+
+      socket.on("bidRejected", (e) => {
+        setMsg(e?.reason ?? "입찰이 거절되었습니다.");
+      });
+
+      $("#btn").addEventListener("click", () => {
+        const name = $("#name").value || "익명";
+        const price = Number($("#price").value || 0);
+        socket.emit("bid", { name, price });
+      });
+
+      if (isAdmin) {
+        $("#start").addEventListener("click", () => socket.emit("admin:start"));
+        $("#end").addEventListener("click", () => socket.emit("admin:end"));
+        $("#reset").addEventListener("click", () => socket.emit("admin:reset"));
+      }
+    </script>
+  </body>
 </html>

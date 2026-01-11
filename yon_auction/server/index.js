@@ -55,8 +55,12 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 // callback의 매개변수 socket은 접속한 클라이언트와 통신할 수 있는 객체
 io.on("connection", (socket) => {
     
-    // 접속자를 확인할 수 있음
-    console.log("새로운 클라이언트 접속:", socket.id);
+    const role = socket.handshake.auth.role || "viewer";
+    socket.data.role = role;
+
+    socket.emit("state", publicState());
+    console.log("connected: ", socket.id, "role: ", role);
+
 
     // 접속자가 "bid" 이벤트를 보내면 실행되는 핸들러
     /*
@@ -65,8 +69,51 @@ io.on("connection", (socket) => {
             -> 즉, 누가 입찰하든 모든 접속자의 화면이 즉시 갱신되는 구조
         (...data, at: Date.now()): 크라이언트가 보낸 데이터에 at 속성을 추가하여 현재 시간을 기록
     */
+
+    // ===== 입찰 처리 =====
     socket.on("bid", (data) => {
-        io.emit("bid", {...data, at: Date.now()});
+        if (state.phase !== "running") {
+            socket.emit("bidRejected", { reason: "경매가 진행 중이 아닙니다." });
+            return;
+        }
+        const name = String(data?.name ?? "익명").slice(0,20);
+        const price = Number(data?.price);
+
+        if (!Number.isFinite(price) || price <= 0) {
+            socket.emit("bidRejected", { reason: "입찰가는 1 이상의 숫자여야 합니다."});
+            return;
+        }
+
+        if (price <= state.highestBid) {
+            socket.emit("bidRejected", { reason: `입찰가는 현재 최고 입찰가(${state.highestBid}원)보다 높아야 합니다.`});
+            return;
+        }
+
+        state.highestBid = price;
+        state.highestBidder = name;
+
+        broadcastState();
+    });
+
+    // ====== 관리자 컨트롤(일단 role=admin이면 허용) ======
+    socket.on("admin:start", () => {
+        if (socket.data.role !== "admin") return;
+        startAuction();
+    });
+
+    socket.on("admin:end", () => {
+        if (socket.data.role !== "admin") return;
+        endAuction();
+    });
+    socket.on("admin:reset", () => {
+        if (socket.data.role !== "admin") return;
+        state.phase = "idle";
+        state.index = 0;
+        state.highestBid = 0;
+        state.highestBidder = null;
+        state.endsAt = null;
+        state.results = [];
+        broadcastState();
     });
 });
 
@@ -79,3 +126,81 @@ const PORT = 3000; // 서버가 사용할 포트 번호
 server.listen(PORT, () => {
     console.log(`http://localhost:${PORT}`);    // 콭솔에 접속 주소 출력
 });
+
+
+// === 테스트 ===
+const items = ["탑A", "탑B", "탑C", "미드A", "미드B", "원딜A", "서폿A"];    // 테스트를 위한 라인 배열
+
+// 서버 상태
+const state = {
+    phase: "idle",  // 현재 상태: idle, running, ended
+    index: 0,   // 현재 경매 대상
+    highestBid: 0,  // 현재 최고 입찰가
+    highestBidder: null,    // 현재 최고 입찰자
+    endsAt: null,   // 경매 종료 시간
+    results: [] // 최종 낙찰 결과
+}
+
+function currentItem() {
+    return items[state.index] ?? null;
+}
+
+// 클라이언트에게 보내는 정보
+function publicState() {
+    return {
+        phase: state.phase,
+        item: currentItem(),
+        index: state.index,
+        total: items.length,
+        highestBid: state.highestBid,
+        highestBidder: state.highestBidder,
+        endsAt: state.endsAt,
+        results: state.results
+    }
+}
+
+// 서버에 연결된 모든 사람에게 현재 상태를 이벤트로 방송
+function broadcastState() {
+    io.emit("state", publicState());
+}
+
+function startAuction(durationMs = 30000) {
+    if (!currentItem()) {
+        state.phase = "ended";
+        state.endsAt = null;
+        broadcastState();
+        return;
+    }
+    
+    state.phase = "running";
+    state.highestBid = 0;
+    state.highestBidder = null;
+    state.endsAt = Date.now() + durationMs;
+    broadcastState();
+}
+
+function endAuction() {
+    if (state.phase !== "running") return;
+
+    const item = currentItem();
+    state.results.push({
+        item,
+        winner: state.highestBidder,
+        price: state.highestBid,
+        endedAt: Date.now()
+    });
+
+    state.index += 1;
+    state.phase = "idle"
+    state.endsAt = null;
+    state.highestBid = 0;
+    state.highestBidder = null;
+    
+    broadcastState();
+}
+
+setInterval(() => {
+  if (state.phase === "running" && state.endsAt && Date.now() >= state.endsAt) {
+    endAuction();
+  }
+}, 200);
