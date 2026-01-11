@@ -75,7 +75,7 @@ io.on("connection", (socket) => {
 const PORT = 3000; // 서버가 사용할 포트 번호
 
 // server.listen(PORT, ...): 해당 포트로 서버를 열고 요청을 받기 시작
-// callback은 서버가 성공적으로 켜졌을 때 한 번 실행됨
+// callback은 서버가 성공적으로 켜졌을 때 한 번 실행 됨
 server.listen(PORT, () => {
     console.log(`http://localhost:${PORT}`);    // 콭솔에 접속 주소 출력
 });
