@@ -1,0 +1,574 @@
+/* ===================================
+   연낳대 시즌6 경매 시스템 - 공통 스타일
+   =================================== */
+
+:root {
+  /* 색상 팔레트 */
+  --primary: #5865F2;
+  --primary-dark: #4752C4;
+  --secondary: #3BA55C;
+  --danger: #ED4245;
+  --warning: #FAA61A;
+  --dark: #23272A;
+  --darker: #18191C;
+  --light: #DCDDDE;
+  --white: #FFFFFF;
+  
+  /* 포지션 색상 */
+  --top: #FF6B6B;
+  --jug: #4ECDC4;
+  --mid: #45B7D1;
+  --adc: #F7DC6F;
+  --sup: #BB8FCE;
+  
+  /* 그림자 */
+  --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: linear-gradient(135deg, var(--darker) 0%, var(--dark) 100%);
+  color: var(--light);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* 컨테이너 */
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* 헤더 */
+.header {
+  background: var(--darker);
+  padding: 15px 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--primary);
+  box-shadow: var(--shadow);
+}
+
+.header h1 {
+  font-size: 1.5rem;
+  color: var(--white);
+}
+
+.header .role-badge {
+  background: var(--primary);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* 카드 */
+.card {
+  background: var(--dark);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+
+.card-title {
+  font-size: 1.2rem;
+  color: var(--white);
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #40444B;
+}
+
+/* 버튼 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--white);
+}
+
+.btn-primary:hover {
+  background: var(--primary-dark);
+}
+
+.btn-success {
+  background: var(--secondary);
+  color: var(--white);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: var(--white);
+}
+
+.btn-warning {
+  background: var(--warning);
+  color: var(--dark);
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 0.875rem;
+}
+
+.btn-lg {
+  padding: 16px 32px;
+  font-size: 1.25rem;
+}
+
+/* 입력 필드 */
+.input-group {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+input[type="number"],
+input[type="text"],
+select {
+  flex: 1;
+  padding: 12px 16px;
+  border: 2px solid #40444B;
+  border-radius: 8px;
+  background: var(--darker);
+  color: var(--white);
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* 그리드 레이아웃 */
+.grid {
+  display: grid;
+  gap: 20px;
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+}
+
+/* 경매 현황 */
+.auction-main {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+@media (max-width: 1024px) {
+  .auction-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 현재 경매 선수 */
+.current-player {
+  text-align: center;
+  padding: 30px;
+}
+
+.player-image {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid var(--primary);
+  margin-bottom: 20px;
+  background: var(--darker);
+}
+
+.player-name {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--white);
+  margin-bottom: 10px;
+}
+
+.player-position {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.position-TOP { background: var(--top); color: var(--dark); }
+.position-JUG { background: var(--jug); color: var(--dark); }
+.position-MID { background: var(--mid); color: var(--dark); }
+.position-ADC { background: var(--adc); color: var(--dark); }
+.position-SUP { background: var(--sup); color: var(--dark); }
+
+/* 입찰 정보 */
+.bid-info {
+  background: var(--darker);
+  border-radius: 12px;
+  padding: 30px;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.current-bid {
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--warning);
+}
+
+.current-bidder {
+  font-size: 1.2rem;
+  color: var(--light);
+  margin-top: 10px;
+}
+
+.min-bid {
+  font-size: 0.9rem;
+  color: #72767D;
+  margin-top: 5px;
+}
+
+/* 타이머 */
+.timer-container {
+  text-align: center;
+  margin: 20px 0;
+}
+
+.timer {
+  font-size: 4rem;
+  font-weight: 700;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+}
+
+.timer.warning {
+  color: var(--warning);
+  animation: pulse 0.5s ease-in-out infinite;
+}
+
+.timer.danger {
+  color: var(--danger);
+  animation: pulse 0.3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* 팀 목록 */
+.team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.team-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: var(--darker);
+  border-radius: 8px;
+  border-left: 4px solid var(--primary);
+}
+
+.team-item.current-bidder-team {
+  border-left-color: var(--warning);
+  background: rgba(250, 166, 26, 0.1);
+}
+
+.team-name {
+  font-weight: 600;
+  color: var(--white);
+}
+
+.team-points {
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+/* 큐 리스트 */
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--darker);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.queue-item.current {
+  background: rgba(88, 101, 242, 0.2);
+  border: 2px solid var(--primary);
+}
+
+.queue-item.sold {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.queue-seq {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dark);
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+/* 입찰 패널 */
+.bid-panel {
+  background: var(--darker);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.bid-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.bid-buttons .btn {
+  padding: 15px;
+  font-size: 1.1rem;
+}
+
+.custom-bid {
+  display: flex;
+  gap: 10px;
+}
+
+.custom-bid input {
+  flex: 1;
+  font-size: 1.2rem;
+  text-align: center;
+}
+
+/* 결과 테이블 */
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.results-table th,
+.results-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #40444B;
+}
+
+.results-table th {
+  background: var(--darker);
+  color: var(--white);
+  font-weight: 600;
+}
+
+.results-table tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* 탭 */
+.tabs {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 20px;
+  background: var(--darker);
+  padding: 5px;
+  border-radius: 8px;
+}
+
+.tab {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  background: transparent;
+  color: var(--light);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  background: var(--dark);
+}
+
+.tab.active {
+  background: var(--primary);
+  color: var(--white);
+}
+
+/* 상태 표시 */
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.status-pending { background: #40444B; color: var(--light); }
+.status-running { background: var(--secondary); color: var(--white); }
+.status-sold { background: var(--primary); color: var(--white); }
+.status-unsold { background: var(--danger); color: var(--white); }
+
+/* 메시지/알림 */
+.message {
+  padding: 15px 20px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  font-weight: 500;
+}
+
+.message-success {
+  background: rgba(59, 165, 92, 0.2);
+  border-left: 4px solid var(--secondary);
+  color: var(--secondary);
+}
+
+.message-error {
+  background: rgba(237, 66, 69, 0.2);
+  border-left: 4px solid var(--danger);
+  color: var(--danger);
+}
+
+.message-info {
+  background: rgba(88, 101, 242, 0.2);
+  border-left: 4px solid var(--primary);
+  color: var(--primary);
+}
+
+/* 로딩 */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--dark);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 진행바 */
+.progress-bar {
+  height: 8px;
+  background: var(--darker);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+
+/* 스크롤바 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--darker);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #40444B;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5865F2;
+}
+
+/* 유틸리티 */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.mt-10 { margin-top: 10px; }
+.mt-20 { margin-top: 20px; }
+.mb-10 { margin-bottom: 10px; }
+.mb-20 { margin-bottom: 20px; }
+.hidden { display: none !important; }

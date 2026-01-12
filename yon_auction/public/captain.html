@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>팀장 - 연낳대 시즌6 경매</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* 팀장 페이지 전용 스타일 */
+    .my-team-card {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      padding: 25px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    
+    .my-team-name {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--white);
+    }
+    
+    .my-team-points {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--warning);
+      margin-top: 10px;
+    }
+    
+    .bid-quick-buttons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    
+    .bid-quick-buttons .btn {
+      font-size: 1.3rem;
+      padding: 20px;
+    }
+    
+    .roster-slot {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 15px;
+      background: var(--darker);
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    
+    .roster-slot.empty {
+      opacity: 0.5;
+      border: 2px dashed #40444B;
+      background: transparent;
+    }
+    
+    .slot-position {
+      width: 50px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+    
+    .can-bid-indicator {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 15px 30px;
+      border-radius: 30px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      z-index: 100;
+      box-shadow: var(--shadow-lg);
+    }
+    
+    .can-bid-indicator.can-bid {
+      background: var(--secondary);
+      color: var(--white);
+    }
+    
+    .can-bid-indicator.cannot-bid {
+      background: var(--danger);
+      color: var(--white);
+    }
+  </style>
+</head>
+<body>
+  <!-- 헤더 -->
+  <header class="header">
+    <h1>🎮 연낳대 시즌6 경매 시스템</h1>
+    <span class="role-badge" id="teamBadge">🏆 팀장</span>
+  </header>
+
+  <div class="container">
+    <!-- 상태 메시지 -->
+    <div id="message" class="message hidden"></div>
+
+    <!-- 팀 선택 (URL 파라미터 없을 때) -->
+    <div id="teamSelect" class="card hidden">
+      <h3 class="card-title">팀을 선택해주세요</h3>
+      <div id="teamSelectList" class="grid grid-3">
+        <!-- 팀 선택 버튼 -->
+      </div>
+    </div>
+
+    <div class="auction-main">
+      <!-- 왼쪽: 메인 경매 화면 -->
+      <div class="main-section">
+        <!-- 내 팀 정보 -->
+        <div class="my-team-card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div class="my-team-name" id="myTeamName">-</div>
+              <div style="color: rgba(255,255,255,0.7);">팀장: <span id="myCaptainName">-</span></div>
+            </div>
+            <div style="text-align: right;">
+              <div style="color: rgba(255,255,255,0.7);">보유 포인트</div>
+              <div class="my-team-points"><span id="myPoints">0</span> pt</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 현재 경매 선수 -->
+        <div class="card current-player">
+          <div id="noPlayer" class="hidden">
+            <p style="font-size: 1.5rem; color: #72767D;">경매 대기 중...</p>
+          </div>
+          <div id="playerInfo">
+            <img id="playerImage" class="player-image" src="" alt="선수 이미지">
+            <h2 id="playerName" class="player-name">-</h2>
+            <span id="playerPosition" class="player-position">-</span>
+          </div>
+
+          <!-- 타이머 -->
+          <div class="timer-container">
+            <div id="timer" class="timer">--</div>
+            <p id="timerStatus" style="color: #72767D;">대기 중</p>
+          </div>
+
+          <!-- 입찰 정보 -->
+          <div class="bid-info">
+            <div class="current-bid"><span id="currentBid">0</span> pt</div>
+            <div class="current-bidder">최고 입찰: <span id="currentBidder">-</span></div>
+            <div class="min-bid">최소 입찰가: <span id="minBid">5</span> pt</div>
+          </div>
+        </div>
+
+        <!-- 입찰 패널 -->
+        <div class="card bid-panel" id="bidPanel">
+          <h3 class="card-title">💰 입찰하기</h3>
+          
+          <!-- 빠른 입찰 버튼 -->
+          <div class="bid-quick-buttons">
+            <button class="btn btn-primary bid-btn" data-amount="min">최소</button>
+            <button class="btn btn-primary bid-btn" data-amount="+5">+5</button>
+            <button class="btn btn-primary bid-btn" data-amount="+10">+10</button>
+            <button class="btn btn-warning bid-btn" data-amount="+50">+50</button>
+          </div>
+          
+          <!-- 직접 입력 -->
+          <div class="custom-bid">
+            <input type="number" id="customBidInput" placeholder="직접 입력" min="0" step="5">
+            <button class="btn btn-success btn-lg" id="btnBid">입찰!</button>
+          </div>
+          
+          <p id="bidError" style="color: var(--danger); margin-top: 10px; display: none;"></p>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 사이드바 -->
+      <div class="sidebar">
+        <!-- 내 팀 로스터 -->
+        <div class="card">
+          <h3 class="card-title">📋 내 팀 로스터</h3>
+          <div id="myRoster">
+            <!-- 로스터 슬롯 -->
+          </div>
+        </div>
+
+        <!-- 다른 팀 현황 -->
+        <div class="card">
+          <h3 class="card-title">👥 팀 현황</h3>
+          <div id="teamList" class="team-list">
+            <!-- 팀 목록 -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 입찰 가능 여부 표시 -->
+  <div id="bidIndicator" class="can-bid-indicator hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/captain.js"></script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>시청자 - 연낳대 시즌6 경매</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* 시청자 페이지 전용 스타일 (큰 화면용) */
+    .viewer-main {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 30px;
+      margin-top: 20px;
+    }
+    
+    @media (max-width: 1200px) {
+      .viewer-main {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    .big-player-card {
+      text-align: center;
+      padding: 40px;
+    }
+    
+    .big-player-image {
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 6px solid var(--primary);
+      margin-bottom: 25px;
+      background: var(--darker);
+      box-shadow: var(--shadow-lg);
+    }
+    
+    .big-player-name {
+      font-size: 3rem;
+      font-weight: 700;
+      color: var(--white);
+      margin-bottom: 15px;
+    }
+    
+    .big-timer {
+      font-size: 6rem;
+      font-weight: 700;
+      margin: 30px 0;
+    }
+    
+    .big-bid {
+      font-size: 4rem;
+      font-weight: 700;
+      color: var(--warning);
+    }
+    
+    .big-bidder {
+      font-size: 1.5rem;
+      color: var(--secondary);
+      margin-top: 10px;
+    }
+    
+    .phase-indicator {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .phase-dot {
+      padding: 10px 25px;
+      border-radius: 25px;
+      font-weight: 600;
+      background: var(--darker);
+      color: #72767D;
+    }
+    
+    .phase-dot.active {
+      background: var(--primary);
+      color: var(--white);
+    }
+    
+    .phase-dot.completed {
+      background: var(--secondary);
+      color: var(--white);
+    }
+    
+    .results-scroll {
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    
+    .result-card {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 15px;
+      background: var(--darker);
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+    
+    .result-card .position-badge {
+      width: 50px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <!-- 헤더 -->
+  <header class="header">
+    <h1>🎮 연낳대 시즌6 경매 시스템</h1>
+    <span class="role-badge">👀 시청자</span>
+  </header>
+
+  <div class="container">
+    <!-- Phase 표시 -->
+    <div class="phase-indicator">
+      <div class="phase-dot" data-phase="TOP">TOP</div>
+      <div class="phase-dot" data-phase="MID">MID</div>
+      <div class="phase-dot" data-phase="BOTTOM">BOTTOM</div>
+    </div>
+
+    <div class="viewer-main">
+      <!-- 왼쪽: 메인 경매 화면 -->
+      <div class="main-section">
+        <div class="card big-player-card">
+          <!-- 대기 상태 -->
+          <div id="waitingState" class="hidden">
+            <h2 style="font-size: 2rem; color: #72767D;">🕐 경매 대기 중...</h2>
+            <p style="margin-top: 20px; color: #72767D;">잠시 후 경매가 시작됩니다.</p>
+          </div>
+          
+          <!-- 경매 종료 -->
+          <div id="endedState" class="hidden">
+            <h2 style="font-size: 2rem; color: var(--secondary);">🎉 경매 종료!</h2>
+            <p style="margin-top: 20px; color: #72767D;">모든 선수 경매가 완료되었습니다.</p>
+          </div>
+          
+          <!-- 경매 진행 중 -->
+          <div id="auctionState">
+            <img id="playerImage" class="big-player-image" src="" alt="선수">
+            <h2 id="playerName" class="big-player-name">-</h2>
+            <span id="playerPosition" class="player-position" style="font-size: 1.2rem; padding: 8px 20px;">-</span>
+            
+            <!-- 타이머 -->
+            <div id="timer" class="big-timer timer">--</div>
+            
+            <!-- 입찰 정보 -->
+            <div class="big-bid"><span id="currentBid">0</span> pt</div>
+            <div class="big-bidder">
+              <span id="bidderLabel" style="color: #72767D;">최고 입찰:</span>
+              <span id="currentBidder">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 팀별 포인트 현황 -->
+        <div class="card">
+          <h3 class="card-title">👥 팀 현황</h3>
+          <div id="teamGrid" class="grid grid-3">
+            <!-- 팀 카드 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 낙찰 결과 -->
+      <div class="sidebar">
+        <div class="card">
+          <h3 class="card-title">🏆 낙찰 결과 <span id="resultCount" style="float: right; color: #72767D;">0명</span></h3>
+          <div id="resultsList" class="results-scroll">
+            <!-- 결과 목록 -->
+          </div>
+        </div>
+        
+        <!-- 현재 큐 미리보기 -->
+        <div class="card">
+          <h3 class="card-title">📋 대기 중인 선수</h3>
+          <div id="upcomingQueue" class="queue-list" style="max-height: 300px;">
+            <!-- 다음 선수들 -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/viewer.js"></script>
+</body>
+</html>

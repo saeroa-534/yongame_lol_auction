@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>관리자 - 연낳대 시즌6 경매</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- 헤더 -->
+  <header class="header">
+    <h1>🎮 연낳대 시즌6 경매 시스템</h1>
+    <span class="role-badge">👑 관리자</span>
+  </header>
+
+  <div class="container">
+    <!-- 상태 메시지 -->
+    <div id="message" class="message hidden"></div>
+
+    <div class="auction-main">
+      <!-- 왼쪽: 메인 경매 화면 -->
+      <div class="main-section">
+        <!-- 현재 경매 선수 -->
+        <div class="card current-player">
+          <div id="noPlayer" class="hidden">
+            <p style="font-size: 1.5rem; color: #72767D;">경매 대상을 선택해주세요</p>
+          </div>
+          <div id="playerInfo">
+            <img id="playerImage" class="player-image" src="" alt="선수 이미지">
+            <h2 id="playerName" class="player-name">-</h2>
+            <span id="playerPosition" class="player-position">-</span>
+            <p id="playerTier" style="margin-top: 10px; color: #72767D;">-</p>
+          </div>
+
+          <!-- 타이머 -->
+          <div class="timer-container">
+            <div id="timer" class="timer">--</div>
+            <p id="timerStatus" style="color: #72767D;">대기 중</p>
+          </div>
+
+          <!-- 입찰 정보 -->
+          <div class="bid-info">
+            <div class="current-bid"><span id="currentBid">0</span> pt</div>
+            <div class="current-bidder">최고 입찰: <span id="currentBidder">-</span></div>
+            <div class="min-bid">최소 입찰가: <span id="minBid">5</span> pt</div>
+          </div>
+        </div>
+
+        <!-- 관리자 컨트롤 -->
+        <div class="card">
+          <h3 class="card-title">⚙️ 경매 컨트롤</h3>
+          <div class="grid grid-4" style="gap: 10px;">
+            <button id="btnStart" class="btn btn-success btn-lg">▶️ 시작</button>
+            <button id="btnPause" class="btn btn-warning btn-lg">⏸️ 일시정지</button>
+            <button id="btnEnd" class="btn btn-danger btn-lg">⏹️ 강제 종료</button>
+            <button id="btnNext" class="btn btn-primary btn-lg">⏭️ 다음 선수</button>
+          </div>
+          <div class="grid grid-3 mt-20" style="gap: 10px;">
+            <button id="btnExtend10" class="btn btn-sm">+10초</button>
+            <button id="btnExtend30" class="btn btn-sm">+30초</button>
+            <button id="btnReset" class="btn btn-danger btn-sm">🔄 DB 리셋</button>
+          </div>
+        </div>
+
+        <!-- 팀별 현황 -->
+        <div class="card">
+          <h3 class="card-title">👥 팀 현황</h3>
+          <div id="teamList" class="grid grid-3">
+            <!-- 팀 카드가 여기에 동적으로 생성 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 사이드바 -->
+      <div class="sidebar">
+        <!-- Phase 탭 -->
+        <div class="tabs">
+          <button class="tab active" data-phase="TOP">TOP</button>
+          <button class="tab" data-phase="MID">MID</button>
+          <button class="tab" data-phase="BOTTOM">BOTTOM</button>
+        </div>
+
+        <!-- 경매 큐 -->
+        <div class="card">
+          <h3 class="card-title">📋 경매 순서 <span id="queueProgress" style="float:right; font-size: 0.9rem; color: #72767D;">0/0</span></h3>
+          <div id="queueList" class="queue-list">
+            <!-- 큐 아이템이 여기에 동적으로 생성 -->
+          </div>
+        </div>
+
+        <!-- 낙찰 결과 -->
+        <div class="card">
+          <h3 class="card-title">🏆 최근 낙찰</h3>
+          <div id="recentResults" class="queue-list" style="max-height: 200px;">
+            <!-- 최근 낙찰 결과 -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>
