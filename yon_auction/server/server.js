@@ -1,374 +1,556 @@
-//  === Node.js의 내장모듈과 외부 라이브러리 불러오기 ===
-const fs = require("fs");                       // Node.js의 내장 모듈 fs(File System)를 가져옴. 파일 및 디렉토리 작업을 수행하는 기능 제공
-const path = require("path");                   // Node.js의 내장 모듈 path를 가져옴. path 모듈을 통해 운영체재와 상관없이 파일의 경로를 다룰 수 있음
-const http = require("http");                   // Node.js의 내장 모듈 http를 가져옴. http 모듈은 HTTP 서버와 클라이언트를 만들기 위한 기능을 제공함
+// server/server.js
+const path = require("path");
+const http = require("http");
+const crypto = require("crypto");           // 로그 테이블에 넣을 고유 ID 만들기
+const express = require("express");
+const { Server } = require("socket.io");
 
-const sqlite3 = require("sqlite3").verbose();   // sqlite3 라이브러리를 가져옴. verbose(): 디버깅 정보를 더 많이 출력하도록 설정(디버깅 용이)
-const express = require("express");             // express 라이브러리를 가져옴. xpress는 Node.js에서 가장 많이 사용되는 웹 프레임워크중 하나이며, HTTP 서버를 쉽게 만들고, 라우팅/정적파일 제공 등을 편하게 함
-const { Server } = require("socket.io");        // socket.io 라이브러리에서 Server 클래스를 가져옴. 웹 소켓 기반의 실시간 통신 버서를 만들기 위한 핵심 객체
+const {
+  initDb,
+  resetDb,
+  get,
+  all,
+  run,
+  execSql,
+} = require("./db/db");
 
-// === 서버 설정 및 생성 ===
-const app = express();                          // express 어플리케이션의 인스턴드를 생성. app 변수는 요청 처리 규칙(미들웨어/라우트)를 설정하는데 사용
+// ------------------------------
+// 기본 설정
+// ------------------------------
+const PORT = Number(process.env.PORT || 3000);
+const PUBLIC_DIR = path.join(__dirname, "..", "public");
 
-// HTTP 서버를 생성
-// express 어플리케이션을 인자로 전달하여, 서버가 요청을 받으면 app(express)가 HTTP 요청을 처리할 수 있도록 함
-// 즉, HTTP의 실서버 = server, 요청 처리 로직 = app
+const PHASE_ORDER_SQL = `
+  CASE phase
+    WHEN 'TOP' THEN 1
+    WHEN 'MID' THEN 2
+    WHEN 'BOTTOM' THEN 3
+    ELSE 99
+  END
+`;
+
+// ------------------------------
+// 서버/소켓 생성
+// ------------------------------
+const app = express();
 const server = http.createServer(app);
-
-// socket.io 서버를 생성
-// HTTP(웹페이지)와 Socket.io(실시간)가 같은 포트를 공유할 수 있음
-// Socket.io - HTTP(서버) - express(처리)
 const io = new Server(server);
 
-/* === DB 설정 === */
+// 정적 파일 서빙 (public 폴더)
+app.use(express.static(PUBLIC_DIR));
 
-// 경로 설정
-const db_DIR = path.join(__dirname, "db");                      // __dirname: 현재 파일(server/server.js)이 위치한 경로
-const db_PATH = path.join(db_DIR, "auction.db");                // DB 파일 경로
-const schema_SQL_PATH = path.join(db_DIR, "schema.sql");        // schema 파일 경로
-const init_data_SQL_PATH = path.join(db_DIR, "init_data.sql");  // 초기 데이터 파일 경로
-const reset_SQL_PATH = path.join(db_DIR, "reset.sql");          // DB 리셋 파일 경로
+app.get("/", (req, res) => {
+  res.redirect("/index.html");
+});
 
-let db = null;  // DB 객체를 저장할 변수
+// 디버그용: 현재 스냅샷 JSON
+app.get("/api/snapshot", async (req, res) => {
+  try {
+    const snapshot = await buildSnapshot();
+    res.json(snapshot);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
 
-// DB 디렉토리가 없으면 생성하는 함수
-function ensureDBdir() {
-    if (!fs.existsSync(db_DIR)) {
-        fs.mkdirSync(db_DIR, {recursive: true});
+// ------------------------------
+// 경매 실행 상태(메모리)
+// ------------------------------
+let auctionRunning = false;     // admin:start 이후 true
+let timerEndAt = null;          // Date.now() 기준 ms
+let timerInterval = null;       // setInterval 핸들
+let lastEmittedRemaining = null;
+
+// ------------------------------
+// 유틸: DB 트랜잭션
+// ------------------------------
+async function withTransaction(fn) {
+  await execSql("BEGIN;");
+  try {
+    const out = await fn();
+    await execSql("COMMIT;");
+    return out;
+  } catch (err) {
+    await execSql("ROLLBACK;");
+    throw err;
+  }
+}
+
+// ------------------------------
+// 스냅샷: 화면들(관리자/팀장/관전자)이 한 번에 렌더링하기 좋게
+// ------------------------------
+async function buildSnapshot() {
+  const config = await get("SELECT * FROM auction_config WHERE id = 1;");
+  const state = await get("SELECT * FROM auction_state WHERE id = 1;");
+
+  const current = state?.current_player_id
+    ? await get(
+        `
+        SELECT
+          q.id AS queue_id,
+          q.phase, q.sequence, q.status,
+          p.id AS player_id, p.name AS player_name, p.position, p.tier, p.bio, p.img_url
+        FROM auction_queue q
+        JOIN players p ON p.id = q.player_id
+        WHERE q.id = ?
+        `,
+        [state.current_queue_id]
+      )
+    : null;
+
+  const teams = await all(
+    `
+    SELECT
+      t.*,
+      p.name AS captain_name
+    FROM teams t
+    JOIN players p ON p.id = t.captain_player_id
+    ORDER BY t.id
+    `
+  );
+
+  const roster = await all(
+    `
+    SELECT
+      r.team_id, r.slot, r.player_id, r.price_paid, r.acquired_via, r.acquired_at,
+      p.name AS player_name, p.position AS player_position, p.img_url
+    FROM team_roster r
+    JOIN players p ON p.id = r.player_id
+    ORDER BY r.team_id, r.slot
+    `
+  );
+
+  const queue = await all(
+    `
+    SELECT
+      q.id AS queue_id, q.phase, q.sequence, q.status,
+      p.id AS player_id, p.name AS player_name, p.position, p.img_url
+    FROM auction_queue q
+    JOIN players p ON p.id = q.player_id
+    ORDER BY ${PHASE_ORDER_SQL}, q.sequence
+    `
+  );
+
+  const logs = await all(
+    `
+    SELECT * FROM auction_log
+    ORDER BY created_at DESC
+    LIMIT 50
+    `
+  );
+
+  return {
+    serverTime: new Date().toISOString(),
+    running: auctionRunning,
+    timer: timerEndAt ? { endAt: timerEndAt } : null,
+    config,
+    state,
+    current,
+    teams,
+    roster,
+    queue,
+    logs,
+  };
+}
+
+async function broadcastSnapshot() {
+  const snapshot = await buildSnapshot();
+  io.emit("snapshot", snapshot);
+}
+
+// ------------------------------
+// 타이머
+// ------------------------------
+function stopTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+  timerEndAt = null;
+  lastEmittedRemaining = null;
+}
+
+function startTimer(seconds) {
+  timerEndAt = Date.now() + seconds * 1000;
+  lastEmittedRemaining = null;
+
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(async () => {
+    if (!auctionRunning || !timerEndAt) return;
+
+    const msLeft = timerEndAt - Date.now();
+    const secLeft = Math.max(0, Math.ceil(msLeft / 1000));
+
+    // 너무 잦은 emit 방지(초가 바뀔 때만)
+    if (secLeft !== lastEmittedRemaining) {
+      lastEmittedRemaining = secLeft;
+      io.emit("timer", { remaining: secLeft });
     }
+
+    if (msLeft <= 0) {
+      // 타이머 종료 => 현재 선수 SOLD/UNSOLD 처리 후 다음으로
+      stopTimer();
+      try {
+        await finalizeCurrentByTimer();
+      } catch (e) {
+        io.emit("toast", { type: "error", message: `Finalize error: ${String(e)}` });
+      }
+    }
+  }, 200);
 }
 
-// SQL 파일을 promise로 실행하는 함수
-// sqlite3의 db.exec()는 콜백 기반이므로, 이를 프로미스 기반으로 감싸서 비동기/await 패턴으로 사용할 수 있도록 함
-/*. ===== callback 함수란 =====
-    - 비동기 작업이 완료된 후 호출되는 함수. 작업이 끝난 후 콜백 함수가 호출되면서 결과를 전달
-    - ex) 파일 읽기, 네트워크 요청 등 시간이 걸리는 작업이 끝난 후 실행할 코드를 정의할 때 사용 
-    - 비동기란?
-        - 시간이 걸리는 작업이 완료될 때까지 기다리지 않고, 다음 코드를 즉시 실행하는 방식
-        - ex) 파일 읽기 요청을 보내고, 파일이 완전히 읽히기 전에 다른 작업을 수행할 수 있음
-        - 콜백 함수는 비동기 작업이 완료된 후 호출되어 결과를 처리
-
-    - 그럼 무엇이 문제인가?
-        - 보통 await/async 패턴을 사용하여 비동기 작업을 기다림. 그러나 콜백 기반 함수는 이를 직접 지원하지 않음
-        - sqlite3의 db.exec()는 콜백 기반이므로, 이를 프로미스 기반으로 감싸서 비동기/await 패턴으로 사용할 수 있도록 해야함
-
-*/
-/* ===== 문법에 대한 고찰 ===== 
-    - new Promise((resolve, reject) => { ... }): 새로운 프로미스 객체를 생성
-        - resolve: 작업이 성공했을 때 호출하는 함수
-        - reject: 작업이 실패했을 때 호출하는 함수
-    - db.exec()의 매개변수
-        - sql: 실행할 SQL 명령 문자열 (필수)
-        - callback: 실행 완료 후 호출될 콜백 함수 (선택)
-    - db.exec(sql, (err) => { ... }): sqlite3의 exec 메서드를 사용하여 SQL 명령을 실행
-        - err: 실행 중 발생한 오류 객체(오류가 없으면 null)
-    - 삼항 연산자(err ? reject(err) : resolve()): err가 존재하면 reject(err)를 호출하여 프로미스를 실패 상태로 만들고, 그렇지 않으면 resolve()를 호출하여 성공 상태로 만듦
-
-    풀어쓴 버전
-    function execSql(sql) {
-        return new Promise(function (resolve, reject) {
-            db.exec(sql, function (err) {
-            if (err) {
-                reject(err);   // Promise 실패 처리
-            } else {
-                resolve();     // Promise 성공 처리
-            }
-            });
-    });
+// ------------------------------
+// 입찰 규칙 계산 (네 config 테이블 기준)
+// ------------------------------
+function getBidStep(config, currentHighBid) {
+  if (!config) return 5;
+  if (currentHighBid >= config.bid_step_threshold) return config.bid_step_high;
+  return config.bid_step_low;
 }
 
-*/
-function execSql(sql) {
-  return new Promise((resolve, reject) => {
-    db.exec(sql, (err) => (err ? reject(err) : resolve()));
-  });
+function calcMinAllowedBid(config, state) {
+  // 최소 입찰가: global_min_bid (state에 유지)
+  return Math.max(0, Number(state?.global_min_bid || config?.min_bid_start || 5));
 }
 
-// SQL 파일을 읽어서 실행하는 함수
-/*.===== buffer vs string =====
-    - buffer: 바이너리 데이터를 저장하는 객체. 파일을 읽을 때, raw한 바이너리 데이터를 담고 있음
-    - string: 텍스트 데이터를 저장하는 객체. buffer를 특정 인코딩(예: utf8)으로 디코딩한 결과
-    - fs.readFileSync()는 기본적으로 바이너리(buffer)로 읽어옴
-    - 따라서 fs.readFileSync(filePath, "utf8")를 통해 문자열(string)로 읽어와야 함
-*/
-function execSqlFile(filePath) {
-  const sql = fs.readFileSync(filePath, "utf8");
-  return execSql(sql);
-}
-
-// DB 열기 또는 초기화 함수
-async function openOrInitDb() {
-  ensureDBdir();
-  const isNew = !fs.existsSync(db_PATH);    // DB 파일이 존재하지 않으면 true
-
-  db = new sqlite3.Database(db_PATH);       // DB 파일 열기(없으면 새로 생성)
-
-  await execSql("PRAGMA foreign_keys = ON;");   // SQLite에서는 foreign key 제약 조건이 기본적으로 비활성화 되어 있으므로, 이를 활성화(혹시 모르니까)
-
-  if (isNew) {
-    await execSqlFile(schema_SQL_PATH);
-    await execSqlFile(init_data_SQL_PATH);
-    console.log("✅ auction.db 생성 + schema/init_data 적용 완료");
-  } else {
-    console.log("✅ 기존 auction.db 사용:", db_PATH);
-  }
-}
-
-// DB reset 함수
-/* === ({reseed = true} = {})의 의미 ===
-    - 함수의 매개변수로 객체를 받고, 그 객체의 reseed 속성에 기본값 true를 설정
-    - 즉, resetDb() 함수 호출 시 reseed 옵션을 명시하지 않으면 기본적으로 true로 처리됨
-    - 예시:
-        resetDb();              // reseed = true (기본값)
-        resetDb({reseed: false}); // reseed = false (명시적 지정)
-
-    - 함수의 매개변수를 객체로 받는 이유?
-        - 옵션이 많아질 경우, 매개변수를 일일이 지정하는 것보다 객체로 받는 것이 편리 (순서 신경 안써도 됨)
-        - 기본값을 이용해서 선택 옵션을 처리하기 쉬움
-        - 가독성이 좋아지고, 호출 시 어떤 옵션이 사용되는지 명확해짐
-        - "구조 분해 할당"과 함께 사용 됨
-    
-    - 구조 분해 할당(Destructuring Assignment)이란?
-        - 객체나 배열의 속성/요소를 개별 변수로 쉽게 추출하는 문법
-        - ex) 
-            const obj = {a: 1, b: 2};
-            const {a, b} = obj; // a=1, b=2
-        - obj.a를 매번 쓰는 대신 a로 바로 접근 가능
-
-    - 객체를 미리 선언을 안해도 되는 이유
-        - 즉석에서 객체를 생성하여 함수에 전달하는 방식
-
-    - reset을 하는데 reseed 옵셥이 필요하지는 않음. 무조건 초기값을 넣을거니깐. 만약 초기값을 넣지 않는다고 하면 고려될 수도 있음
-        - 공부용으로 남겨둠
-*/
-
-async function resetDb({ reseed = true } = {}) {
-  await execSql("PRAGMA foreign_keys = ON;");
-  await execSqlFile(reset_SQL_PATH);
-  if (reseed) {
-    await execSqlFile(init_data_SQL_PATH);
-  }
-  console.log("♻️ DB reset 완료 (reseed:", reseed, ")");
-}
-
-
-
-// admin의 DB 리셋 요청 처리
-let resettingDB = false;
-
-socket.on("admin:reset", async () => {
-  if (socket.data.role !== "admin") return;
-
-  // ✅ 락: 이미 reset 중이면 거절
-  if (resettingDB) {
-    socket.emit("admin:reset:done", { ok: false, error: "이미 초기화 진행 중입니다." });
+// ------------------------------
+// 현재 대상 경매 종료 처리(타이머로 자동 호출)
+// ------------------------------
+async function finalizeCurrentByTimer() {
+  const config = await get("SELECT * FROM auction_config WHERE id = 1;");
+  const state = await get("SELECT * FROM auction_state WHERE id = 1;");
+  if (!state?.current_queue_id || !state?.current_player_id) {
+    await broadcastSnapshot();
     return;
   }
 
-  resettingDB = true;
-  try {
+  const queueRow = await get("SELECT * FROM auction_queue WHERE id = ?;", [state.current_queue_id]);
+  if (!queueRow || queueRow.status !== "PENDING") {
+    // 이미 처리된 상태면 그냥 다음 스냅샷
+    await broadcastSnapshot();
+    return;
+  }
+
+  const player = await get("SELECT * FROM players WHERE id = ?;", [state.current_player_id]);
+  const hasBid = Number(state.current_high_bid || 0) > 0 && !!state.current_high_team_id;
+
+  await withTransaction(async () => {
+    if (hasBid) {
+      const team = await get("SELECT * FROM teams WHERE id = ?;", [state.current_high_team_id]);
+
+      if (!team) throw new Error("High bid team not found.");
+      if (team.point_now < state.current_high_bid) throw new Error("Team point insufficient at finalize.");
+
+      // SOLD 처리
+      await run("UPDATE auction_queue SET status = 'SOLD' WHERE id = ?;", [state.current_queue_id]);
+
+      await run(
+        `
+        INSERT INTO team_roster (team_id, slot, player_id, price_paid, acquired_via)
+        VALUES (?, ?, ?, ?, 'bid')
+        `,
+        [team.id, player.position, player.id, state.current_high_bid]
+      );
+
+      await run("UPDATE teams SET point_now = point_now - ? WHERE id = ?;", [
+        state.current_high_bid,
+        team.id,
+      ]);
+
+      await run(
+        `
+        INSERT INTO auction_log (id, event_type, act, queue_id, player_id, team_id, price)
+        VALUES (?, 'ADMIN', 'SOLD_BY_TIMER', ?, ?, ?, ?)
+        `,
+        [crypto.randomUUID(), state.current_queue_id, player.id, team.id, state.current_high_bid]
+      );
+
+      // 판매 완료 => 유찰 카운트 초기화 + 최소입찰가 초기값으로
+      await run(
+        `
+        UPDATE auction_state
+        SET
+          current_high_bid = 0,
+          current_high_team_id = NULL,
+          unsold_count = 0,
+          global_min_bid = ?,
+          last_tick_at = CURRENT_TIMESTAMP
+        WHERE id = 1
+        `,
+        [config.min_bid_start]
+      );
+    } else {
+      // UNSOLD 처리
+      await run("UPDATE auction_queue SET status = 'UNSOLD' WHERE id = ?;", [state.current_queue_id]);
+
+      const newUnsold = Number(state.unsold_count || 0) + 1;
+      const newMinBid = config.min_bid_start + newUnsold * config.min_bid_increment_on_unsold;
+
+      await run(
+        `
+        INSERT INTO auction_log (id, event_type, act, queue_id, player_id, team_id, price)
+        VALUES (?, 'ADMIN', 'UNSOLD_BY_TIMER', ?, ?, NULL, 0)
+        `,
+        [crypto.randomUUID(), state.current_queue_id, player.id]
+      );
+
+      await run(
+        `
+        UPDATE auction_state
+        SET
+          current_high_bid = 0,
+          current_high_team_id = NULL,
+          unsold_count = ?,
+          global_min_bid = ?,
+          last_tick_at = CURRENT_TIMESTAMP
+        WHERE id = 1
+        `,
+        [newUnsold, newMinBid]
+      );
+    }
+  });
+
+  // 다음 경매 대상으로 이동
+  await advanceToNextQueueItem();
+
+  // 자동 진행이면 다음 타이머 시작(러닝 상태일 때만)
+  if (auctionRunning) {
+    const config2 = await get("SELECT * FROM auction_config WHERE id = 1;");
+    startTimer(config2.timer_seconds);
+  }
+
+  await broadcastSnapshot();
+}
+
+// 다음 PENDING 한 명을 찾아 state 갱신
+async function advanceToNextQueueItem() {
+  const next = await get(
+    `
+    SELECT id, player_id
+    FROM auction_queue
+    WHERE status = 'PENDING'
+    ORDER BY ${PHASE_ORDER_SQL}, sequence
+    LIMIT 1
+    `
+  );
+
+  if (!next) {
+    await run(
+      `
+      UPDATE auction_state
+      SET
+        current_queue_id = NULL,
+        current_player_id = NULL,
+        current_high_bid = 0,
+        current_high_team_id = NULL,
+        last_tick_at = CURRENT_TIMESTAMP
+      WHERE id = 1
+      `
+    );
+    return;
+  }
+
+  await run(
+    `
+    UPDATE auction_state
+    SET
+      current_queue_id = ?,
+      current_player_id = ?,
+      current_high_bid = 0,
+      current_high_team_id = NULL,
+      last_tick_at = CURRENT_TIMESTAMP
+    WHERE id = 1
+    `,
+    [next.id, next.player_id]
+  );
+}
+
+// ------------------------------
+// 소켓 이벤트
+// ------------------------------
+io.on("connection", async (socket) => {
+  // 접속 즉시 현재 스냅샷 전달
+  socket.emit("snapshot", await buildSnapshot());
+
+  // 클라가 역할/팀 정보를 알려주도록 (admin/captain/viewer)
+  socket.on("hello", async (payload) => {
+    // payload 예: { role: "captain", teamId: "T1" }
+    socket.data.role = payload?.role || "viewer";
+    socket.data.teamId = payload?.teamId || null;
+
+    socket.emit("toast", { type: "info", message: `Hello: ${socket.data.role}` });
+  });
+
+  // --------------------------
+  // 팀장 입찰
+  // --------------------------
+  socket.on("bid", async (payload) => {
+    try {
+      if (!auctionRunning) {
+        socket.emit("toast", { type: "warn", message: "Auction is not running." });
+        return;
+      }
+
+      const teamId = payload?.teamId || socket.data.teamId;
+      const bidPrice = Number(payload?.price);
+
+      if (!teamId) {
+        socket.emit("toast", { type: "error", message: "teamId is required." });
+        return;
+      }
+      if (!Number.isFinite(bidPrice) || bidPrice <= 0) {
+        socket.emit("toast", { type: "error", message: "price must be a positive number." });
+        return;
+      }
+
+      const config = await get("SELECT * FROM auction_config WHERE id = 1;");
+      const state = await get("SELECT * FROM auction_state WHERE id = 1;");
+
+      if (!state?.current_queue_id || !state?.current_player_id) {
+        socket.emit("toast", { type: "warn", message: "No current auction target." });
+        return;
+      }
+
+      // 최소 허용 입찰가 계산
+      const minBid = calcMinAllowedBid(config, state);
+      const step = getBidStep(config, Number(state.current_high_bid || 0));
+      const minByStep = Number(state.current_high_bid || 0) > 0 ? Number(state.current_high_bid) + step : minBid;
+      const minAllowed = Math.max(minBid, minByStep);
+
+      if (bidPrice < minAllowed) {
+        socket.emit("toast", {
+          type: "warn",
+          message: `Bid too low. 최소 ${minAllowed} 이상이어야 함.`,
+        });
+        return;
+      }
+
+      const team = await get("SELECT * FROM teams WHERE id = ?;", [teamId]);
+      if (!team) {
+        socket.emit("toast", { type: "error", message: "Team not found." });
+        return;
+      }
+      if (team.point_now < bidPrice) {
+        socket.emit("toast", { type: "warn", message: "포인트가 부족합니다." });
+        return;
+      }
+
+      // DB 반영 (현재 최고입찰 갱신 + 로그)
+      await withTransaction(async () => {
+        await run(
+          `
+          UPDATE auction_state
+          SET
+            current_high_bid = ?,
+            current_high_team_id = ?,
+            last_tick_at = CURRENT_TIMESTAMP
+          WHERE id = 1
+          `,
+          [bidPrice, teamId]
+        );
+
+        await run(
+          `
+          INSERT INTO auction_log (id, event_type, act, queue_id, player_id, team_id, price)
+          VALUES (?, 'BID', 'BID_PLACED', ?, ?, ?, ?)
+          `,
+          [
+            crypto.randomUUID(),
+            state.current_queue_id,
+            state.current_player_id,
+            teamId,
+            bidPrice,
+          ]
+        );
+      });
+
+      // 입찰 들어오면 타이머 리셋(10초 등)
+      startTimer(config.timer_seconds);
+
+      await broadcastSnapshot();
+    } catch (e) {
+      socket.emit("toast", { type: "error", message: String(e) });
+    }
+  });
+
+  // --------------------------
+  // 관리자 컨트롤
+  // --------------------------
+  socket.on("admin:start", async () => {
+    if (socket.data.role !== "admin") return;
+
+    const config = await get("SELECT * FROM auction_config WHERE id = 1;");
+    auctionRunning = true;
+
+    // running 시작 시 타이머 가동
+    startTimer(config.timer_seconds);
+    io.emit("toast", { type: "info", message: "Auction started." });
+    await broadcastSnapshot();
+  });
+
+  socket.on("admin:pause", async () => {
+    if (socket.data.role !== "admin") return;
+
+    auctionRunning = false;
+    stopTimer();
+    io.emit("toast", { type: "info", message: "Auction paused." });
+    await broadcastSnapshot();
+  });
+
+  // 즉시 현재 선수 마감(강제 다음으로)
+  socket.on("admin:finalize", async () => {
+    if (socket.data.role !== "admin") return;
+
+    stopTimer();
+    await finalizeCurrentByTimer();
+  });
+
+  // DB 완전 리셋(초기데이터 다시)
+  socket.on("admin:reset", async () => {
+    if (socket.data.role !== "admin") return;
+
+    auctionRunning = false;
+    stopTimer();
+
     await resetDb({ reseed: true });
 
-    // 메모리 상태도 초기화
-    state.phase = "idle";
-    state.index = 0;
-    state.highestBid = 0;
-    state.highestBidder = null;
-    state.endsAt = null;
-    state.results = [];
-    broadcastState();
+    io.emit("toast", { type: "info", message: "DB reset done." });
+    await broadcastSnapshot();
+  });
 
-    socket.emit("admin:reset:done", { ok: true });
-  } catch (e) {
-    console.error("admin:reset failed:", e);
-    socket.emit("admin:reset:done", { ok: false, error: String(e.message || e) });
-  } finally {
-    resettingDB = false; // ✅ 무조건 락 해제 (성공/실패 상관없이)
-  }
+  socket.on("disconnect", () => {
+    // 필요하면 접속자 관리 로직 추가
+  });
 });
 
+// ------------------------------
+// 서버 시작
+// ------------------------------
+async function main() {
+  // 최초 구동 시: schema 적용 + 비어있을 때만 init_data 주입
+  // (강제 초기화가 필요하면 initDb({ reseed: true })로 바꾸면 됨)
+  await initDb({ reseed: false });
 
-// === 정적 파일(프론트) 설정 ===
+  // placeholder 때문에 current_high_team_id가 세팅돼 있을 수 있어서,
+  // 경매 시작 전에 일단 current_high_bid=0이면 team_id를 NULL로 정리해둠(선택)
+  await run(
+    `
+    UPDATE auction_state
+    SET current_high_team_id = NULL
+    WHERE id = 1 AND current_high_bid = 0
+    `
+  );
 
-// 브라우저에서 localhost:3000에 접속했을 때 public/index.html을 제공하도록 설정
-/*
-    __dirname: 현재파일(server/index.js)이 위치한 경로. 실행중인 파일이 들어 있는 폴더의 절대경로를 반환하는 특수 값
-    path.join(__dirname, "..", "public"): 상위폴더로 이동 후(".."), public 폴더 경로와 합침
-    express.static(): 경로 안의 파일들을 정적 파일로 제공
-        ex)
-        - /index.html 요청 -> public/index.html을 반환
-        - /style.css를 요청 -> public/style.css를 반환
-    app.use(): 들어오는 모든 요청에 대해 이 미들웨어를 적용해라
+  server.listen(PORT, () => {
+    console.log(`[yonauction] http://localhost:${PORT}`);
+    console.log(`[yonauction] admin:  /admin.html`);
+    console.log(`[yonauction] captain: /captain.html`);
+    console.log(`[yonauction] viewer:  /viewer.html`);
+  });
 
-    --> public 폴더가 웹서버의 루트처럼 동작하게 함
-*/
-app.use(express.static(path.join(__dirname, "..", "public")));
+  // 첫 스냅샷 전체 브로드캐스트(접속자 없어도 OK)
+  await broadcastSnapshot();
+}
 
-// === Socket.io 이벤트 처리 ===
-
-// io.on(connection, 콜백): 새로운 클라이언트가 접속했을 때 발생하는 이벤트
-// callback의 매개변수 socket은 접속한 클라이언트와 통신할 수 있는 객체
-io.on("connection", (socket) => {
-    
-    const role = socket.handshake.auth.role || "viewer";
-    socket.data.role = role;
-
-    socket.emit("state", publicState());
-    console.log("connected: ", socket.id, "role: ", role);
-
-
-    // 접속자가 "bid" 이벤트를 보내면 실행되는 핸들러
-    /*
-        data: 크라이언트가 보낸 객체
-        io.emit("bid", ...): 현재 서버에 연결된 모든 사람들에게 bid 이벤트를 보냄
-            -> 즉, 누가 입찰하든 모든 접속자의 화면이 즉시 갱신되는 구조
-        (...data, at: Date.now()): 크라이언트가 보낸 데이터에 at 속성을 추가하여 현재 시간을 기록
-    */
-
-    // ===== 입찰 처리 =====
-    socket.on("bid", (data) => {
-        if (state.phase !== "running") {
-            socket.emit("bidRejected", { reason: "경매가 진행 중이 아닙니다." });
-            return;
-        }
-        const name = String(data?.name ?? "익명").slice(0,20);
-        const price = Number(data?.price);
-
-        if (!Number.isFinite(price) || price <= 0) {
-            socket.emit("bidRejected", { reason: "입찰가는 1 이상의 숫자여야 합니다."});
-            return;
-        }
-
-        if (price <= state.highestBid) {
-            socket.emit("bidRejected", { reason: `입찰가는 현재 최고 입찰가(${state.highestBid}원)보다 높아야 합니다.`});
-            return;
-        }
-
-        state.highestBid = price;
-        state.highestBidder = name;
-
-        broadcastState();
-    });
-
-    // ====== 관리자 컨트롤(일단 role=admin이면 허용) ======
-    socket.on("admin:start", () => {
-        if (socket.data.role !== "admin") return;
-        startAuction();
-    });
-
-    socket.on("admin:end", () => {
-        if (socket.data.role !== "admin") return;
-        endAuction();
-    });
-    socket.on("admin:reset", () => {
-        if (socket.data.role !== "admin") return;
-        state.phase = "idle";
-        state.index = 0;
-        state.highestBid = 0;
-        state.highestBidder = null;
-        state.endsAt = null;
-        state.results = [];
-        broadcastState();
-    });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
 });
-
-// === 서버 실행 ===
-
-const PORT = 3000; // 서버가 사용할 포트 번호
-
-// server.listen(PORT, ...): 해당 포트로 서버를 열고 요청을 받기 시작
-// callback은 서버가 성공적으로 켜졌을 때 한 번 실행 됨
-// server.listen(PORT, () => {
-//     console.log(`http://localhost:${PORT}`);    // 콭솔에 접속 주소 출력
-// });
-
-// DB 초기화 후 서버 시작
-(async () => {
-  try {
-    await openOrInitDb();
-    server.listen(PORT, () => {
-      console.log(`http://localhost:${PORT}`);
-    });
-  } catch (e) {
-    console.error("❌ DB init failed:", e);
-    process.exit(1);
-  }
-})();
-
-
-// === 테스트 ===
-const items = ["탑A", "탑B", "탑C", "미드A", "미드B", "원딜A", "서폿A"];    // 테스트를 위한 라인 배열
-
-// 서버 상태
-const state = {
-    phase: "idle",  // 현재 상태: idle, running, ended
-    index: 0,   // 현재 경매 대상
-    highestBid: 0,  // 현재 최고 입찰가
-    highestBidder: null,    // 현재 최고 입찰자
-    endsAt: null,   // 경매 종료 시간
-    results: [] // 최종 낙찰 결과
-}
-
-function currentItem() {
-    return items[state.index] ?? null;
-}
-
-// 클라이언트에게 보내는 정보
-function publicState() {
-    return {
-        phase: state.phase,
-        item: currentItem(),
-        index: state.index,
-        total: items.length,
-        highestBid: state.highestBid,
-        highestBidder: state.highestBidder,
-        endsAt: state.endsAt,
-        results: state.results
-    }
-}
-
-// 서버에 연결된 모든 사람에게 현재 상태를 이벤트로 방송
-function broadcastState() {
-    io.emit("state", publicState());
-}
-
-function startAuction(durationMs = 30000) {
-    if (!currentItem()) {
-        state.phase = "ended";
-        state.endsAt = null;
-        broadcastState();
-        return;
-    }
-    
-    state.phase = "running";
-    state.highestBid = 0;
-    state.highestBidder = null;
-    state.endsAt = Date.now() + durationMs;
-    broadcastState();
-}
-
-function endAuction() {
-    if (state.phase !== "running") return;
-
-    const item = currentItem();
-    state.results.push({
-        item,
-        winner: state.highestBidder,
-        price: state.highestBid,
-        endedAt: Date.now()
-    });
-
-    state.index += 1;
-    state.phase = "idle"
-    state.endsAt = null;
-    state.highestBid = 0;
-    state.highestBidder = null;
-    
-    broadcastState();
-}
-
-setInterval(() => {
-  if (state.phase === "running" && state.endsAt && Date.now() >= state.endsAt) {
-    endAuction();
-  }
-}, 200);
