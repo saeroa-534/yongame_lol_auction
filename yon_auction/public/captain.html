@@ -6,94 +6,388 @@
   <title>팀장 - 연낳대 시즌6 경매</title>
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    /* 팀장 페이지 전용 스타일 */
+    /* 팀장 페이지 전용 스타일 - 16:9 최적화 */
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+    
+    .container {
+      height: calc(100vh - 60px);
+      padding: 10px 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .captain-main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      flex: 1;
+      min-height: 0;
+    }
+    
+    /* 왼쪽: 경매 섹션 */
+    .auction-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+    }
+    
     .my-team-card {
       background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-      padding: 25px;
-      border-radius: 12px;
-      margin-bottom: 20px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     
     .my-team-name {
-      font-size: 1.8rem;
+      font-size: 1.4rem;
       font-weight: 700;
       color: var(--white);
     }
     
     .my-team-points {
-      font-size: 2.5rem;
+      font-size: 1.8rem;
       font-weight: 700;
       color: var(--warning);
-      margin-top: 10px;
+    }
+    
+    /* 현재 경매 영역 */
+    .current-auction-card {
+      display: flex;
+      flex-direction: column;
+      padding: 15px;
+      min-height: 0;
+    }
+    
+    /* 선수 정보 + 경매 진행 병렬 배치 */
+    .player-auction-row {
+      display: flex;
+      gap: 20px;
+      flex: 1;
+      min-height: 0;
+    }
+    
+    .player-info-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    
+    .auction-status-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    
+    .player-image {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 4px solid var(--primary);
+      margin-bottom: 8px;
+    }
+    
+    .player-name {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    
+    .player-tier {
+      font-size: 0.85rem;
+      color: var(--warning);
+      margin-bottom: 5px;
+    }
+    
+    .player-bio {
+      font-size: 0.8rem;
+      color: #B9BBBE;
+      max-width: 250px;
+      line-height: 1.3;
+      word-break: keep-all;
+    }
+    
+    .timer {
+      font-size: 3.5rem;
+      font-weight: 700;
+      margin: 5px 0;
+    }
+    
+    .current-bid {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--warning);
+    }
+    
+    /* 입찰 패널 - 선수 정보 아래 */
+    .bid-panel {
+      padding: 12px;
     }
     
     .bid-quick-buttons {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-    
-    .bid-quick-buttons .btn {
-      font-size: 1.3rem;
-      padding: 20px;
-    }
-    
-    .roster-slot {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-      padding: 15px;
-      background: var(--darker);
-      border-radius: 8px;
+      gap: 8px;
       margin-bottom: 10px;
     }
     
-    .roster-slot.empty {
-      opacity: 0.5;
-      border: 2px dashed #40444B;
-      background: transparent;
+    .bid-quick-buttons .btn {
+      font-size: 1rem;
+      padding: 12px;
     }
     
-    .slot-position {
+    .custom-bid {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .custom-bid input {
+      flex: 1;
+    }
+    
+    .custom-bid .btn {
+      padding: 12px 20px;
+    }
+    
+    /* 오른쪽: 정보 섹션 */
+    .info-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+      overflow: hidden;
+    }
+    
+    /* 팀 현황 - 가로 배치 */
+    .teams-horizontal {
+      display: flex;
+      gap: 8px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding: 5px 0;
+    }
+    
+    .team-chip {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--darker);
+      border-radius: 8px;
+      min-width: 80px;
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
+    
+    .team-chip.my-team {
+      background: var(--primary);
+    }
+    
+    .team-chip.current-bidder {
+      outline: 3px solid var(--warning);
+      outline-offset: -3px;
+    }
+    
+    .team-chip-name {
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--white);
+    }
+    
+    .team-chip-points {
+      font-size: 0.75rem;
+      color: var(--warning);
+    }
+    
+    /* 전체 팀 로스터 - 프로필 사진 활용 */
+    .all-rosters-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+    
+    .team-roster-card {
+      background: var(--darker);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    
+    .team-roster-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #40444B;
+    }
+    
+    .roster-slots {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    
+    .roster-slot-mini {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       width: 50px;
-      height: 50px;
+    }
+    
+    .roster-slot-mini img {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #40444B;
+      background: var(--dark);
+    }
+    
+    .roster-slot-mini.filled img {
+      border-color: var(--secondary);
+    }
+    
+    .roster-slot-mini.empty img {
+      opacity: 0.3;
+    }
+    
+    .roster-slot-mini .slot-label {
+      font-size: 0.6rem;
+      color: #72767D;
+      margin-top: 2px;
+    }
+    
+    .roster-slot-mini .player-name-mini {
+      font-size: 0.65rem;
+      color: var(--white);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 50px;
+    }
+    
+    /* 최근 낙찰 결과 */
+    .recent-results {
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    
+    .result-item {
       display: flex;
       align-items: center;
-      justify-content: center;
-      border-radius: 8px;
-      font-weight: 700;
-      font-size: 0.9rem;
+      gap: 8px;
+      padding: 6px 8px;
+      background: var(--darker);
+      border-radius: 6px;
+      margin-bottom: 5px;
+      font-size: 0.85rem;
     }
     
+    .result-item.unsold {
+      background: rgba(237, 66, 69, 0.2);
+      border-left: 3px solid var(--danger);
+    }
+    
+    /* 입찰 가능 여부 표시 - 제거 (토스트로 대체) */
     .can-bid-indicator {
+      display: none;
+    }
+    
+    /* 토스트 알림 */
+    .toast-container {
       position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 15px 30px;
-      border-radius: 30px;
-      font-weight: 700;
-      font-size: 1.1rem;
-      z-index: 100;
-      box-shadow: var(--shadow-lg);
+      top: 70px;
+      right: 20px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
     }
     
-    .can-bid-indicator.can-bid {
-      background: var(--secondary);
-      color: var(--white);
+    .toast {
+      background: rgba(35, 39, 42, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      pointer-events: auto;
+      animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+      max-width: 300px;
     }
     
-    .can-bid-indicator.cannot-bid {
-      background: var(--danger);
-      color: var(--white);
+    .toast.success {
+      border-left: 4px solid var(--secondary);
+    }
+    
+    .toast.error {
+      border-left: 4px solid var(--danger);
+    }
+    
+    .toast.info {
+      border-left: 4px solid var(--primary);
+    }
+    
+    .toast.warning {
+      border-left: 4px solid var(--warning);
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(100%);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    
+    @keyframes fadeOut {
+      from {
+        opacity: 1;
+      }
+      to {
+        opacity: 0;
+      }
+    }
+    
+    .card {
+      padding: 10px 12px;
+      margin-bottom: 0;
+    }
+    
+    .card-title {
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+    
+    /* 숨겨진 메시지 (토스트로 대체) */
+    #message {
+      display: none !important;
     }
   </style>
 </head>
 <body>
   <!-- 헤더 -->
-  <header class="header">
-    <h1>🎮 연낳대 시즌6 경매 시스템</h1>
+  <header class="header" style="padding: 8px 20px;">
+    <h1 style="font-size: 1.2rem;">🎮 연낳대 시즌6 경매</h1>
     <span class="role-badge" id="teamBadge">🏆 팀장</span>
   </header>
 
@@ -104,98 +398,95 @@
     <!-- 팀 선택 (URL 파라미터 없을 때) -->
     <div id="teamSelect" class="card hidden">
       <h3 class="card-title">팀을 선택해주세요</h3>
-      <div id="teamSelectList" class="grid grid-3">
-        <!-- 팀 선택 버튼 -->
-      </div>
+      <div id="teamSelectList" class="grid grid-3"></div>
     </div>
 
-    <div class="auction-main">
-      <!-- 왼쪽: 메인 경매 화면 -->
-      <div class="main-section">
+    <div class="captain-main">
+      <!-- 왼쪽: 경매 섹션 -->
+      <div class="auction-section">
         <!-- 내 팀 정보 -->
         <div class="my-team-card">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div class="my-team-name" id="myTeamName">-</div>
-              <div style="color: rgba(255,255,255,0.7);">팀장: <span id="myCaptainName">-</span></div>
-            </div>
-            <div style="text-align: right;">
-              <div style="color: rgba(255,255,255,0.7);">보유 포인트</div>
-              <div class="my-team-points"><span id="myPoints">0</span> pt</div>
-            </div>
+          <div style="text-align: center; flex: 1;">
+            <div class="my-team-name" id="myTeamName">-</div>
+            <div style="color: rgba(255,255,255,0.7); font-size: 0.85rem;">팀장: <span id="myCaptainName">-</span></div>
+          </div>
+          <div style="text-align: center; flex: 1;">
+            <div style="color: rgba(255,255,255,0.7); font-size: 0.8rem;">보유 포인트</div>
+            <div class="my-team-points"><span id="myPoints">0</span> pt</div>
           </div>
         </div>
 
         <!-- 현재 경매 선수 -->
-        <div class="card current-player">
+        <div class="card current-auction-card" style="flex: 1;">
           <div id="noPlayer" class="hidden">
-            <p style="font-size: 1.5rem; color: #72767D;">경매 대기 중...</p>
+            <p style="font-size: 1.3rem; color: #72767D;">경매 대기 중...</p>
           </div>
-          <div id="playerInfo">
-            <img id="playerImage" class="player-image" src="" alt="선수 이미지">
-            <h2 id="playerName" class="player-name">-</h2>
-            <span id="playerPosition" class="player-position">-</span>
-          </div>
-
-          <!-- 타이머 -->
-          <div class="timer-container">
-            <div id="timer" class="timer">--</div>
-            <p id="timerStatus" style="color: #72767D;">대기 중</p>
-          </div>
-
-          <!-- 입찰 정보 -->
-          <div class="bid-info">
-            <div class="current-bid"><span id="currentBid">0</span> pt</div>
-            <div class="current-bidder">최고 입찰: <span id="currentBidder">-</span></div>
-            <div class="min-bid">최소 입찰가: <span id="minBid">5</span> pt</div>
+          <div id="playerInfo" class="player-auction-row">
+            <!-- 선수 정보 섹션 -->
+            <div class="player-info-section">
+              <img id="playerImage" class="player-image" src="" alt="선수 이미지">
+              <h2 id="playerName" class="player-name">-</h2>
+              <span id="playerPosition" class="player-position">-</span>
+              <div id="playerTier" class="player-tier"></div>
+              <div id="playerBio" class="player-bio"></div>
+            </div>
+            <!-- 경매 진행 섹션 -->
+            <div class="auction-status-section">
+              <div id="timer" class="timer">--</div>
+              <p id="timerStatus" style="color: #72767D; margin-top: -5px; font-size: 0.9rem;">대기 중</p>
+              <div class="current-bid"><span id="currentBid">0</span> pt</div>
+              <div style="color: #72767D; font-size: 0.9rem; margin-top: 5px;">
+                최고: <span id="currentBidder" style="color: var(--secondary);">-</span>
+              </div>
+              <div style="color: #72767D; font-size: 0.85rem; margin-top: 3px;">
+                최소 입찰가: <span id="minBid" style="color: var(--warning);">5</span>pt
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- 입찰 패널 -->
         <div class="card bid-panel" id="bidPanel">
-          <h3 class="card-title">💰 입찰하기</h3>
-          
-          <!-- 빠른 입찰 버튼 -->
           <div class="bid-quick-buttons">
             <button class="btn btn-primary bid-btn" data-amount="min">최소</button>
             <button class="btn btn-primary bid-btn" data-amount="+5">+5</button>
             <button class="btn btn-primary bid-btn" data-amount="+10">+10</button>
             <button class="btn btn-warning bid-btn" data-amount="+50">+50</button>
           </div>
-          
-          <!-- 직접 입력 -->
           <div class="custom-bid">
             <input type="number" id="customBidInput" placeholder="직접 입력" min="0" step="5">
-            <button class="btn btn-success btn-lg" id="btnBid">입찰!</button>
+            <button class="btn btn-success" id="btnBid">입찰!</button>
           </div>
-          
-          <p id="bidError" style="color: var(--danger); margin-top: 10px; display: none;"></p>
+          <p id="bidError" style="color: var(--danger); margin-top: 8px; display: none; font-size: 0.85rem; text-align: center;"></p>
+          <p id="maxBidInfo" style="color: #72767D; margin-top: 8px; font-size: 0.85rem; text-align: center;">최대 입찰 가능: <span id="maxBidAmount">-</span>pt</p>
+        </div>
+        
+        <!-- 팀 현황 (가로) - 위로 이동 -->
+        <div class="card">
+          <h3 class="card-title">👥 팀 현황</h3>
+          <div id="teamsHorizontal" class="teams-horizontal"></div>
         </div>
       </div>
 
-      <!-- 오른쪽: 사이드바 -->
-      <div class="sidebar">
-        <!-- 내 팀 로스터 -->
-        <div class="card">
-          <h3 class="card-title">📋 내 팀 로스터</h3>
-          <div id="myRoster">
-            <!-- 로스터 슬롯 -->
-          </div>
+      <!-- 오른쪽: 정보 섹션 -->
+      <div class="info-section">
+        <!-- 낙찰/유찰 전체 기록 - 비율 1 -->
+        <div class="card" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+          <h3 class="card-title">🏆 낙찰/유찰 기록</h3>
+          <div id="recentResults" class="recent-results" style="flex: 1; overflow-y: auto;"></div>
         </div>
 
-        <!-- 다른 팀 현황 -->
-        <div class="card">
-          <h3 class="card-title">👥 팀 현황</h3>
-          <div id="teamList" class="team-list">
-            <!-- 팀 목록 -->
-          </div>
+        <!-- 전체 팀 로스터 - 비율 2 -->
+        <div class="card" style="flex: 2; display: flex; flex-direction: column; min-height: 0;">
+          <h3 class="card-title">📊 전체 팀 로스터</h3>
+          <div id="allRosters" class="all-rosters-grid" style="flex: 1; overflow-y: auto;"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 입찰 가능 여부 표시 -->
-  <div id="bidIndicator" class="can-bid-indicator hidden"></div>
+  <!-- 토스트 알림 컨테이너 -->
+  <div id="toastContainer" class="toast-container"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/captain.js"></script>

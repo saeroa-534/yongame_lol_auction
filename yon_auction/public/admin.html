@@ -29,7 +29,8 @@
             <img id="playerImage" class="player-image" src="" alt="선수 이미지">
             <h2 id="playerName" class="player-name">-</h2>
             <span id="playerPosition" class="player-position">-</span>
-            <p id="playerTier" style="margin-top: 10px; color: #72767D;">-</p>
+            <p id="playerTier" style="margin-top: 8px; color: var(--warning); font-weight: 600;">-</p>
+            <p id="playerBio" style="margin-top: 4px; color: #B9BBBE; font-size: 0.9rem;">-</p>
           </div>
 
           <!-- 타이머 -->
@@ -59,6 +60,30 @@
             <button id="btnExtend10" class="btn btn-sm">+10초</button>
             <button id="btnExtend30" class="btn btn-sm">+30초</button>
             <button id="btnReset" class="btn btn-danger btn-sm">🔄 DB 리셋</button>
+          </div>
+        </div>
+
+        <!-- 강제 배정 -->
+        <div class="card">
+          <h3 class="card-title">👑 선수 강제 배정</h3>
+          <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 2; min-width: 150px;">
+              <label style="display: block; margin-bottom: 5px; color: #B9BBBE; font-size: 0.9rem;">선수</label>
+              <select id="forcePlayer" class="input" style="width: 100%;">
+                <option value="">선수 선택...</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 100px;">
+              <label style="display: block; margin-bottom: 5px; color: #B9BBBE; font-size: 0.9rem;">팀</label>
+              <select id="forceTeam" class="input" style="width: 100%;">
+                <option value="">팀 선택...</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 80px;">
+              <label style="display: block; margin-bottom: 5px; color: #B9BBBE; font-size: 0.9rem;">가격</label>
+              <input type="number" id="forcePrice" class="input" placeholder="0" min="0" style="width: 100%;">
+            </div>
+            <button id="btnForceAssign" class="btn btn-warning" style="flex: 0;">배정</button>
           </div>
         </div>
 

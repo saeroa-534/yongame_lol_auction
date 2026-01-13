@@ -218,6 +218,69 @@ function setupSockets(io, auction) {
     });
 
     /**
+     * 모든 팀 로스터 요청 (팀장, 시청자용)
+     */
+    socket.on('getAllRosters', async () => {
+      try {
+        const allRosters = await auction.getAllTeamRosters();
+        socket.emit('allRosters', allRosters);
+      } catch (e) {
+        console.error('전체 로스터 요청 오류:', e);
+      }
+    });
+
+    /**
+     * 최근 낙찰 결과 요청 (유찰 포함)
+     */
+    socket.on('getAuctionResults', async () => {
+      try {
+        const results = await auction.getAuctionResults(10);
+        const unsold = await auction.getUnsoldHistory(10);
+        socket.emit('auctionResults', { results, unsold });
+      } catch (e) {
+        console.error('경매 결과 요청 오류:', e);
+      }
+    });
+
+    /**
+     * 모든 선수 목록 요청 (관리자 강제 배정용)
+     */
+    socket.on('admin:getAllPlayers', async () => {
+      if (role !== 'admin') return;
+      try {
+        const players = await auction.getAllPlayers();
+        socket.emit('admin:allPlayers', players);
+      } catch (e) {
+        console.error('선수 목록 요청 오류:', e);
+      }
+    });
+
+    /**
+     * 관리자: 선수 강제 배정
+     * data: { playerId: string, teamId: string, price: number }
+     */
+    socket.on('admin:forceAssign', async (data) => {
+      if (role !== 'admin') {
+        socket.emit('admin:forceAssign:done', { ok: false, error: '권한이 없습니다.' });
+        return;
+      }
+
+      const { playerId, teamId, price } = data || {};
+      if (!playerId || !teamId || !Number.isFinite(Number(price))) {
+        socket.emit('admin:forceAssign:done', { ok: false, error: '모든 필드를 입력해주세요.' });
+        return;
+      }
+
+      try {
+        const result = await auction.forceAssignPlayer(playerId, teamId, Number(price));
+        socket.emit('admin:forceAssign:done', result);
+      } catch (e) {
+        console.error('강제 배정 오류:', e);
+        socket.emit('admin:forceAssign:done', { ok: false, error: String(e.message) });
+      }
+    });
+
+    /**
      * 연결 해제
      */
     socket.on('disconnect', () => {

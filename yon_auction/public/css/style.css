@@ -17,7 +17,7 @@
   /* 포지션 색상 */
   --top: #FF6B6B;
   --jug: #4ECDC4;
-  --mid: #45B7D1;
+  --mid: #45d15c;
   --adc: #F7DC6F;
   --sup: #BB8FCE;
   
@@ -274,7 +274,6 @@ select:focus {
 .current-bidder {
   font-size: 1.2rem;
   color: var(--light);
-  margin-top: 10px;
 }
 
 .min-bid {

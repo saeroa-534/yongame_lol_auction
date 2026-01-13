@@ -6,185 +6,294 @@
   <title>시청자 - 연낳대 시즌6 경매</title>
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    /* 시청자 페이지 전용 스타일 (큰 화면용) */
+    /* 시청자 페이지 - 16:9 최적화, 전체 팀 로스터 메인 */
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+    
+    .container {
+      height: calc(100vh - 60px);
+      padding: 10px 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    
     .viewer-main {
       display: grid;
-      grid-template-columns: 1fr 400px;
-      gap: 30px;
-      margin-top: 20px;
+      grid-template-columns: 320px 1fr;
+      gap: 15px;
+      flex: 1;
+      min-height: 0;
     }
     
-    @media (max-width: 1200px) {
-      .viewer-main {
-        grid-template-columns: 1fr;
-      }
+    /* 왼쪽: 경매 현황 */
+    .auction-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
     }
     
-    .big-player-card {
+    .current-player-card {
       text-align: center;
-      padding: 40px;
+      padding: 15px;
     }
     
-    .big-player-image {
-      width: 280px;
-      height: 280px;
+    .current-player-image {
+      width: 100px;
+      height: 100px;
       border-radius: 50%;
       object-fit: cover;
-      border: 6px solid var(--primary);
-      margin-bottom: 25px;
+      border: 4px solid var(--primary);
+      margin-bottom: 10px;
       background: var(--darker);
-      box-shadow: var(--shadow-lg);
     }
     
-    .big-player-name {
-      font-size: 3rem;
+    .current-player-name {
+      font-size: 1.4rem;
       font-weight: 700;
       color: var(--white);
-      margin-bottom: 15px;
+      margin-bottom: 5px;
     }
     
-    .big-timer {
-      font-size: 6rem;
+    .current-timer {
+      font-size: 3rem;
       font-weight: 700;
-      margin: 30px 0;
+      margin: 10px 0;
     }
     
-    .big-bid {
-      font-size: 4rem;
+    .current-bid-info {
+      font-size: 1.6rem;
       font-weight: 700;
       color: var(--warning);
     }
     
-    .big-bidder {
-      font-size: 1.5rem;
-      color: var(--secondary);
-      margin-top: 10px;
+    .team-mini.current-bidder {
+      outline: 3px solid var(--warning);
+      outline-offset: -3px;
     }
     
-    .phase-indicator {
+    .team-mini-name {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--white);
+    }
+    
+    .team-mini-points {
+      font-size: 0.7rem;
+      color: var(--warning);
+    }
+    
+    /* 최근 낙찰 */
+    .recent-results-compact {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+    
+    .result-mini {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      background: var(--darker);
+      border-radius: 5px;
+      margin-bottom: 4px;
+      font-size: 0.8rem;
+    }
+    
+    /* 오른쪽: 전체 팀 로스터 (메인) */
+    .rosters-main {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    
+    .rosters-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 10px;
+      flex: 1;
+      min-height: 0;
+    }
+    
+    .team-roster-big {
+      background: var(--dark);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+    
+    .team-roster-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #40444B;
+    }
+    
+    .team-roster-name {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--white);
+    }
+    
+    .team-roster-points {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--warning);
+    }
+    
+    .roster-players {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      align-items: center;
+      flex: 1;
+    }
+    
+    .roster-player {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 65px;
+    }
+    
+    .roster-player img {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid #40444B;
+      background: var(--darker);
+    }
+    
+    .roster-player.filled img {
+      border-color: var(--secondary);
+    }
+    
+    .roster-player .position-label {
+      font-size: 0.65rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-top: 4px;
+      font-weight: 600;
+    }
+    
+    .roster-player .player-name-label {
+      font-size: 0.7rem;
+      color: var(--white);
+      text-align: center;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 65px;
+    }
+    
+    .roster-player .price-label {
+      font-size: 0.6rem;
+      color: #72767D;
+    }
+    
+    .roster-player.empty .player-name-label {
+      color: #555;
+    }
+    
+    /* Phase 표시 */
+    .phase-bar {
       display: flex;
       justify-content: center;
       gap: 10px;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
     }
     
-    .phase-dot {
-      padding: 10px 25px;
-      border-radius: 25px;
+    .phase-chip {
+      padding: 6px 20px;
+      border-radius: 20px;
       font-weight: 600;
+      font-size: 0.9rem;
       background: var(--darker);
       color: #72767D;
     }
     
-    .phase-dot.active {
+    .phase-chip.active {
       background: var(--primary);
       color: var(--white);
     }
     
-    .phase-dot.completed {
+    .phase-chip.completed {
       background: var(--secondary);
       color: var(--white);
     }
     
-    .results-scroll {
-      max-height: 500px;
-      overflow-y: auto;
+    .card {
+      padding: 10px 12px;
+      margin-bottom: 0;
     }
     
-    .result-card {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-      padding: 15px;
-      background: var(--darker);
-      border-radius: 10px;
-      margin-bottom: 10px;
-    }
-    
-    .result-card .position-badge {
-      width: 50px;
-      height: 50px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 10px;
-      font-weight: 700;
+    .card-title {
+      font-size: 0.85rem;
+      margin-bottom: 6px;
     }
   </style>
 </head>
 <body>
   <!-- 헤더 -->
-  <header class="header">
-    <h1>🎮 연낳대 시즌6 경매 시스템</h1>
+  <header class="header" style="padding: 8px 20px;">
+    <h1 style="font-size: 1.2rem;">🎮 연낳대 시즌6 경매</h1>
     <span class="role-badge">👀 시청자</span>
   </header>
 
   <div class="container">
     <!-- Phase 표시 -->
-    <div class="phase-indicator">
-      <div class="phase-dot" data-phase="TOP">TOP</div>
-      <div class="phase-dot" data-phase="MID">MID</div>
-      <div class="phase-dot" data-phase="BOTTOM">BOTTOM</div>
+    <div class="phase-bar">
+      <div class="phase-chip" data-phase="TOP">TOP</div>
+      <div class="phase-chip" data-phase="MID">MID</div>
+      <div class="phase-chip" data-phase="BOTTOM">BOTTOM</div>
     </div>
 
     <div class="viewer-main">
-      <!-- 왼쪽: 메인 경매 화면 -->
-      <div class="main-section">
-        <div class="card big-player-card">
-          <!-- 대기 상태 -->
+      <!-- 왼쪽: 경매 현황 사이드바 -->
+      <div class="auction-sidebar">
+        <!-- 현재 경매 -->
+        <div class="card current-player-card">
           <div id="waitingState" class="hidden">
-            <h2 style="font-size: 2rem; color: #72767D;">🕐 경매 대기 중...</h2>
-            <p style="margin-top: 20px; color: #72767D;">잠시 후 경매가 시작됩니다.</p>
+            <p style="font-size: 1.1rem; color: #72767D;">🕐 경매 대기 중...</p>
           </div>
-          
-          <!-- 경매 종료 -->
           <div id="endedState" class="hidden">
-            <h2 style="font-size: 2rem; color: var(--secondary);">🎉 경매 종료!</h2>
-            <p style="margin-top: 20px; color: #72767D;">모든 선수 경매가 완료되었습니다.</p>
+            <p style="font-size: 1.1rem; color: var(--secondary);">🎉 경매 종료!</p>
           </div>
-          
-          <!-- 경매 진행 중 -->
           <div id="auctionState">
-            <img id="playerImage" class="big-player-image" src="" alt="선수">
-            <h2 id="playerName" class="big-player-name">-</h2>
-            <span id="playerPosition" class="player-position" style="font-size: 1.2rem; padding: 8px 20px;">-</span>
-            
-            <!-- 타이머 -->
-            <div id="timer" class="big-timer timer">--</div>
-            
-            <!-- 입찰 정보 -->
-            <div class="big-bid"><span id="currentBid">0</span> pt</div>
-            <div class="big-bidder">
-              <span id="bidderLabel" style="color: #72767D;">최고 입찰:</span>
-              <span id="currentBidder">-</span>
+            <img id="playerImage" class="current-player-image" src="" alt="선수">
+            <h3 id="playerName" class="current-player-name">-</h3>
+            <span id="playerPosition" class="player-position">-</span>
+            <div id="playerTier" style="color: var(--warning); font-size: 0.85rem; margin-top: 5px;"></div>
+            <div id="playerBio" style="color: #B9BBBE; font-size: 0.75rem; max-width: 250px; line-height: 1.3; word-break: keep-all;"></div>
+            <div id="timer" class="current-timer timer">--</div>
+            <div class="current-bid-info"><span id="currentBid">0</span> pt</div>
+            <div style="color: #72767D; font-size: 0.85rem; margin-top: 5px;">
+              최고: <span id="currentBidder" style="color: var(--secondary);">-</span>
             </div>
           </div>
         </div>
-
-        <!-- 팀별 포인트 현황 -->
-        <div class="card">
-          <h3 class="card-title">👥 팀 현황</h3>
-          <div id="teamGrid" class="grid grid-3">
-            <!-- 팀 카드 -->
-          </div>
+        
+        <!-- 최근 낙찰 -->
+        <div class="card" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+          <h3 class="card-title">🏆 최근 낙찰 <span id="resultCount" style="float: right; color: #72767D;">0명</span></h3>
+          <div id="recentResults" class="recent-results-compact"></div>
         </div>
       </div>
 
-      <!-- 오른쪽: 낙찰 결과 -->
-      <div class="sidebar">
-        <div class="card">
-          <h3 class="card-title">🏆 낙찰 결과 <span id="resultCount" style="float: right; color: #72767D;">0명</span></h3>
-          <div id="resultsList" class="results-scroll">
-            <!-- 결과 목록 -->
-          </div>
-        </div>
-        
-        <!-- 현재 큐 미리보기 -->
-        <div class="card">
-          <h3 class="card-title">📋 대기 중인 선수</h3>
-          <div id="upcomingQueue" class="queue-list" style="max-height: 300px;">
-            <!-- 다음 선수들 -->
-          </div>
+      <!-- 오른쪽: 전체 팀 로스터 (메인) -->
+      <div class="rosters-main">
+        <div id="rostersGrid" class="rosters-grid">
+          <!-- 6개 팀 로스터 카드 -->
         </div>
       </div>
     </div>
