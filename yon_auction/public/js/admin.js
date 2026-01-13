@@ -23,7 +23,16 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupEventListeners() {
   // 경매 컨트롤 버튼
   $('#btnStart').addEventListener('click', () => socket.emit('admin:start'));
-  $('#btnPause').addEventListener('click', () => socket.emit('admin:pause'));
+  
+  // 일시정지/재개 토글 버튼
+  $('#btnPause').addEventListener('click', () => {
+    if (currentState?.isPaused) {
+      socket.emit('admin:resume');
+    } else {
+      socket.emit('admin:pause');
+    }
+  });
+  
   $('#btnEnd').addEventListener('click', () => {
     if (confirm('정말 경매를 강제 종료하시겠습니까?')) {
       socket.emit('admin:end');
@@ -51,6 +60,37 @@ function setupEventListeners() {
       renderQueue();
     });
   });
+
+  // 강제 배정 버튼
+  $('#btnForceAssign').addEventListener('click', () => {
+    const playerId = $('#forcePlayer').value;
+    const teamId = $('#forceTeam').value;
+    const price = parseInt($('#forcePrice').value);
+
+    if (!playerId) {
+      showMessage('선수를 선택해주세요.', 'error');
+      return;
+    }
+    if (!teamId) {
+      showMessage('팀을 선택해주세요.', 'error');
+      return;
+    }
+    if (isNaN(price) || price < 0) {
+      showMessage('올바른 가격을 입력해주세요.', 'error');
+      return;
+    }
+
+    const playerName = $('#forcePlayer').selectedOptions[0].text;
+    const teamName = $('#forceTeam').selectedOptions[0].text;
+
+    if (confirm(`${playerName}을(를) ${teamName}에 ${price}pt로 배정하시겠습니까?`)) {
+      socket.emit('admin:forceAssign', { playerId, teamId, price });
+    }
+  });
+
+  // 강제 배정용 선수/팀 목록 요청
+  socket.emit('admin:getAllPlayers');
+  socket.emit('getTeams');
 }
 
 // ===== Socket 이벤트 =====
@@ -106,6 +146,50 @@ socket.on('admin:next:done', (res) => {
   }
 });
 
+// 강제 배정용 선수 목록 수신
+socket.on('admin:allPlayers', (players) => {
+  const select = $('#forcePlayer');
+  select.innerHTML = '<option value="">선수 선택...</option>';
+  
+  players.forEach(p => {
+    const assigned = p.is_assigned > 0;
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = `[${p.position}] ${p.name}${assigned ? ' (배정됨)' : ''}`;
+    opt.disabled = assigned;
+    select.appendChild(opt);
+  });
+});
+
+// 강제 배정용 팀 목록 수신
+socket.on('teams', (teams) => {
+  const select = $('#forceTeam');
+  select.innerHTML = '<option value="">팀 선택...</option>';
+  
+  teams.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = `${t.name} (${t.pointNow}pt)`;
+    select.appendChild(opt);
+  });
+});
+
+// 강제 배정 결과
+socket.on('admin:forceAssign:done', (res) => {
+  if (res.ok) {
+    showMessage(`${res.playerName}이(가) ${res.teamName}에 ${res.price}pt로 배정되었습니다!`, 'success');
+    // 목록 새로고침
+    socket.emit('admin:getAllPlayers');
+    socket.emit('getTeams');
+    // 입력 초기화
+    $('#forcePlayer').value = '';
+    $('#forceTeam').value = '';
+    $('#forcePrice').value = '';
+  } else {
+    showMessage(res.error, 'error');
+  }
+});
+
 // ===== 렌더링 =====
 function renderAll() {
   if (!currentState) return;
@@ -134,7 +218,8 @@ function renderCurrentPlayer() {
   $('#playerName').textContent = player.name;
   $('#playerPosition').textContent = player.position;
   $('#playerPosition').className = `player-position position-${player.position}`;
-  $('#playerTier').textContent = player.tier || '';
+  $('#playerTier').textContent = player.tier || '-';
+  $('#playerBio').textContent = player.bio || '-';
   
   // 이미지 (placeholder 처리)
   const img = $('#playerImage');
@@ -155,6 +240,23 @@ function renderTimer() {
   const timerEl = $('#timer');
   const statusEl = $('#timerStatus');
   
+  // 카운트다운 중인 경우
+  if (currentState.isCountingDown) {
+    timerEl.textContent = currentState.countdownSeconds;
+    timerEl.className = 'timer warning';
+    statusEl.textContent = '잠시 후 시작!';
+    return;
+  }
+  
+  // 일시정지 상태
+  if (currentState.isPaused) {
+    timerEl.textContent = '--';
+    timerEl.className = 'timer';
+    statusEl.textContent = '⏸️ 일시정지';
+    return;
+  }
+  
+  // 타이머가 실행 중이 아닌 경우
   if (!currentState.isRunning || !currentState.endsAt) {
     timerEl.textContent = '--';
     timerEl.className = 'timer';
@@ -167,6 +269,7 @@ function renderTimer() {
 
 function updateTimerDisplay() {
   if (!currentState?.isRunning || !currentState?.endsAt) return;
+  if (currentState?.isCountingDown || currentState?.isPaused) return;
   
   const timerEl = $('#timer');
   const statusEl = $('#timerStatus');
@@ -253,39 +356,57 @@ socket.on('admin:queue', (queueData) => {
 
 function renderResults() {
   const container = $('#recentResults');
-  const results = currentState.results || [];
+  // 서버에서 이미 시간순 정렬된 allResults 사용
+  const allResults = currentState.allResults || [];
   
-  // 최근 5개만 역순으로
-  const recent = results.slice(-5).reverse();
-  
-  container.innerHTML = recent.map(r => `
-    <div class="queue-item">
-      <span class="player-position position-${r.position}" style="padding: 2px 8px; font-size: 0.75rem;">${r.position}</span>
-      <span style="flex: 1;">${r.playerName}</span>
-      <span style="color: var(--warning);">${r.price} pt</span>
-      <span style="color: var(--secondary);">→ ${r.teamName}</span>
-    </div>
-  `).join('') || '<p style="text-align: center; color: #72767D;">아직 낙찰 없음</p>';
+  container.innerHTML = allResults.map(r => {
+    if (r.type === 'unsold') {
+      return `
+        <div class="queue-item" style="background: rgba(237, 66, 69, 0.2); border-left: 3px solid var(--danger);">
+          <span class="player-position position-${r.position}" style="padding: 2px 8px; font-size: 0.75rem;">${r.position}</span>
+          <span style="flex: 1;">${r.playerName}</span>
+          <span style="color: var(--danger);">유찰</span>
+        </div>
+      `;
+    }
+    return `
+      <div class="queue-item">
+        <span class="player-position position-${r.position}" style="padding: 2px 8px; font-size: 0.75rem;">${r.position}</span>
+        <span style="flex: 1;">${r.playerName}</span>
+        <span style="color: var(--warning);">${r.price} pt</span>
+        <span style="color: var(--secondary);">→ ${r.teamName}</span>
+      </div>
+    `;
+  }).join('') || '<p style="text-align: center; color: #72767D;">아직 낙찰 없음</p>';
 }
 
 function updateButtons() {
   const isRunning = currentState.isRunning;
+  const isPaused = currentState.isPaused;
+  const isCountingDown = currentState.isCountingDown;
   const hasPlayer = !!currentState.currentPlayer;
   
-  $('#btnStart').disabled = isRunning || !hasPlayer;
-  $('#btnPause').disabled = !isRunning;
-  $('#btnEnd').disabled = !isRunning;
-  $('#btnNext').disabled = isRunning;
+  $('#btnStart').disabled = isRunning || isCountingDown || !hasPlayer;
+  $('#btnEnd').disabled = !isRunning && !isPaused;
+  $('#btnNext').disabled = isRunning || isCountingDown;
   $('#btnExtend10').disabled = !isRunning;
   $('#btnExtend30').disabled = !isRunning;
   
-  // 일시정지 버튼 텍스트 변경
-  if (isRunning) {
-    $('#btnPause').textContent = '⏸️ 일시정지';
-  } else if (currentState.endsAt && !isRunning) {
-    $('#btnPause').textContent = '▶️ 재개';
-    $('#btnPause').disabled = false;
-    $('#btnPause').onclick = () => socket.emit('admin:resume');
+  // 일시정지/재개 버튼 상태 관리
+  const pauseBtn = $('#btnPause');
+  
+  if (isPaused) {
+    // 일시정지 상태 → 재개 버튼으로
+    pauseBtn.textContent = '▶️ 재개';
+    pauseBtn.disabled = false;
+  } else if (isRunning) {
+    // 진행 중 → 일시정지 버튼으로
+    pauseBtn.textContent = '⏸️ 일시정지';
+    pauseBtn.disabled = false;
+  } else {
+    // 대기 상태
+    pauseBtn.textContent = '⏸️ 일시정지';
+    pauseBtn.disabled = true;
   }
 }
 

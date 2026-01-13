@@ -72,12 +72,12 @@ INSERT INTO players (id, name, position, tier, bio, img_url, is_captain) VALUES
 -- 2) teams (6팀, name UNIQUE)
 -- =========================================================
 INSERT INTO teams (id, name, captain_player_id, point_now) VALUES
-('T1','PLACEHOLDER_TEAM_1','P_JUG_01',1000),
-('T2','PLACEHOLDER_TEAM_2','P_JUG_02',1000),
-('T3','PLACEHOLDER_TEAM_3','P_JUG_03',1000),
-('T4','PLACEHOLDER_TEAM_4','P_JUG_04',1000),
-('T5','PLACEHOLDER_TEAM_5','P_JUG_05',1000),
-('T6','PLACEHOLDER_TEAM_6','P_JUG_06',1000);
+('T1','구효성','P_JUG_01',1000),
+('T2','김정우','P_JUG_02',1000),
+('T3','김태현','P_JUG_03',1000),
+('T4','심지민','P_JUG_04',1000),
+('T5','홍성원','P_JUG_05',1000),
+('T6','황동근','P_JUG_06',1000);
 
 -- =========================================================
 -- 3) team_roster (팀장들은 JUG 슬롯에 미리 포함)
