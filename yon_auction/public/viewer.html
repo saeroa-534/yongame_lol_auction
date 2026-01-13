@@ -25,6 +25,7 @@
       gap: 15px;
       flex: 1;
       min-height: 0;
+      min-width: 0;
     }
     
     /* 왼쪽: 경매 현황 */
@@ -108,8 +109,74 @@
       display: flex;
       flex-direction: column;
       min-height: 0;
+      gap: 10px;
+      min-width: 0;
     }
-    
+
+    .rosters-card {
+      flex: 0 0 60%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .queue-card {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .queue-row {
+      display: flex;
+      gap: 10px;
+      min-height: 0;
+      align-items: flex-start;
+      min-width: 0;
+      overflow: hidden;
+      width: 100%;
+    }
+
+    .queue-tabs-vertical {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--darker);
+      padding: 6px;
+      border-radius: 8px;
+      min-width: 70px;
+      height: fit-content;
+      flex: 0 0 auto;
+    }
+
+    .queue-tabs-vertical .tab {
+      flex: none;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+    }
+
+    .queue-list.horizontal {
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 6px;
+      max-height: 200px;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      flex: 1 1 0;
+      white-space: nowrap;
+    }
+
+    .queue-list.horizontal .queue-item {
+      min-width: 160px;
+      flex: 0 0 auto;
+    }
+
     .rosters-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -122,7 +189,7 @@
     .team-roster-big {
       background: var(--dark);
       border-radius: 10px;
-      padding: 12px;
+      padding: 8px;
       display: flex;
       flex-direction: column;
       box-sizing: border-box;
@@ -132,26 +199,26 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
-      padding-bottom: 8px;
+      margin-bottom: 6px;
+      padding-bottom: 6px;
       border-bottom: 2px solid #40444B;
     }
     
     .team-roster-name {
-      font-size: 1.1rem;
+      font-size: 0.95rem;
       font-weight: 700;
       color: var(--white);
     }
     
     .team-roster-points {
-      font-size: 1rem;
+      font-size: 0.85rem;
       font-weight: 700;
       color: var(--warning);
     }
     
     .roster-players {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       justify-content: center;
       align-items: center;
       flex: 1;
@@ -161,12 +228,12 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      width: 65px;
+      width: 52px;
     }
     
     .roster-player img {
-      width: 50px;
-      height: 50px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       object-fit: cover;
       border: 3px solid #40444B;
@@ -178,7 +245,7 @@
     }
     
     .roster-player .position-label {
-      font-size: 0.65rem;
+      font-size: 0.6rem;
       padding: 2px 6px;
       border-radius: 4px;
       margin-top: 4px;
@@ -186,18 +253,18 @@
     }
     
     .roster-player .player-name-label {
-      font-size: 0.7rem;
+      font-size: 0.6rem;
       color: var(--white);
       text-align: center;
       margin-top: 2px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 65px;
+      max-width: 52px;
     }
     
     .roster-player .price-label {
-      font-size: 0.6rem;
+      font-size: 0.55rem;
       color: #72767D;
     }
     
@@ -292,8 +359,21 @@
 
       <!-- 오른쪽: 전체 팀 로스터 (메인) -->
       <div class="rosters-main">
-        <div id="rostersGrid" class="rosters-grid">
-          <!-- 6개 팀 로스터 카드 -->
+        <div class="card rosters-card">
+          <div id="rostersGrid" class="rosters-grid">
+            <!-- 6개 팀 로스터 카드 -->
+          </div>
+        </div>
+        <div class="card queue-card">
+          <h3 class="card-title">📋 경매 순서 <span id="queueProgress" style="float: right; color: #72767D;">0/0</span></h3>
+          <div class="queue-row" style="flex: 1; min-height: 0;">
+            <div class="queue-tabs-vertical">
+              <button class="tab active" data-phase="TOP">TOP</button>
+              <button class="tab" data-phase="MID">MID</button>
+              <button class="tab" data-phase="BOTTOM">BOTTOM</button>
+            </div>
+            <div id="queueList" class="queue-list horizontal" style="flex: 1;"></div>
+          </div>
         </div>
       </div>
     </div>

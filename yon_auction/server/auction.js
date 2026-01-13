@@ -28,6 +28,8 @@ class Auction {
     this.countdownSeconds = 0;    // 현재 카운트다운 초
     this.onStateChange = null;    // 상태 변경 시 콜백 (브로드캐스트용)
     this.onCountdown = null;      // 카운트다운 콜백
+    this.onDecisionRequest = null; // 포인트 부족 우선권 요청 콜백
+    this.decisionState = null;    // 우선권 처리 상태
   }
 
   // ============================================================
@@ -93,7 +95,7 @@ class Auction {
 
   async getCurrentHighTeam() {
     const state = await this.getAuctionState();
-    if (!state || !state.current_high_team_id) return null;
+    if (!state || !state.current_high_team_id || (state.current_high_bid || 0) <= 0) return null;
 
     return await this.dbGet(`
       SELECT t.*, p.name as captain_name
@@ -140,6 +142,32 @@ class Auction {
           WHEN 'SUP' THEN 5 
         END
     `, [teamId]);
+  }
+
+  async getEligibleTeams(position, minBid) {
+    return await this.dbAll(`
+      SELECT t.*
+      FROM teams t
+      WHERE t.point_now >= ?
+        AND NOT EXISTS (
+          SELECT 1 FROM team_roster tr
+          WHERE tr.team_id = t.id AND tr.slot = ?
+        )
+      ORDER BY t.id
+    `, [minBid, position]);
+  }
+
+  async getLowPointTeams(position, minBid) {
+    return await this.dbAll(`
+      SELECT t.*
+      FROM teams t
+      WHERE t.point_now < ?
+        AND NOT EXISTS (
+          SELECT 1 FROM team_roster tr
+          WHERE tr.team_id = t.id AND tr.slot = ?
+        )
+      ORDER BY t.point_now DESC, t.id
+    `, [minBid, position]);
   }
 
   /**
@@ -287,10 +315,15 @@ class Auction {
     const currentHighTeam = await this.getCurrentHighTeam();
     const teams = await this.getTeams();
     const { soldResults, unsoldResults, allResults } = await this.getAuctionResults();
+    const allRosters = await this.getAllTeamRosters();
 
     // 현재 phase의 큐
     const currentPhase = currentItem?.phase || this.getCurrentPhase(state);
     const phaseQueue = currentPhase ? await this.getQueueByPhase(currentPhase) : [];
+    const phaseQueueByPhase = {};
+    for (const phase of PHASE_ORDER) {
+      phaseQueueByPhase[phase] = await this.getQueueByPhase(phase);
+    }
 
     // 각 phase 진행 상황
     const phaseProgress = {};
@@ -347,6 +380,7 @@ class Auction {
         captainName: t.captain_name,
         pointNow: t.point_now
       })),
+      allRosters,
 
       // 진행 상황
       phaseProgress,
@@ -358,6 +392,19 @@ class Auction {
         sequence: q.sequence,
         status: q.status
       })),
+      phaseQueueByPhase: Object.fromEntries(
+        Object.entries(phaseQueueByPhase).map(([phase, queue]) => [
+          phase,
+          queue.map(q => ({
+            queueId: q.id,
+            playerId: q.player_id,
+            playerName: q.player_name,
+            position: q.position,
+            sequence: q.sequence,
+            status: q.status
+          }))
+        ])
+      ),
 
       // 낙찰 결과 (기존 호환용)
       results: soldResults.map(r => ({
@@ -453,12 +500,24 @@ class Auction {
       return { ok: false, error: '이미 경매가 진행 중입니다.' };
     }
 
-    const currentItem = await this.getCurrentQueueItem();
+    let currentItem = await this.getCurrentQueueItem();
     if (!currentItem) {
       // 다음 대상으로 이동 시도
       const hasNext = await this.moveToNext();
       if (!hasNext) {
         return { ok: false, error: '더 이상 경매할 선수가 없습니다.' };
+      }
+      currentItem = await this.getCurrentQueueItem();
+    }
+
+    if (currentItem) {
+      const state = await this.getAuctionState();
+      const config = await this.getConfig();
+      const minBid = state?.global_min_bid || config.min_bid_start;
+      const eligibleTeams = await this.getEligibleTeams(currentItem.position, minBid);
+
+      if (eligibleTeams.length === 0) {
+        return { ok: true, pendingAdminAssign: true };
       }
     }
 
@@ -470,6 +529,28 @@ class Auction {
 
     await this.runCountdown();
     return { ok: true };
+  }
+
+  async autoAssignIfOnlyTeam() {
+    const state = await this.getAuctionState();
+    const currentItem = await this.getCurrentQueueItem();
+
+    if (!currentItem || (state?.current_high_bid || 0) > 0) {
+      return false;
+    }
+
+    const minBid = state?.global_min_bid || (await this.getConfig()).min_bid_start;
+    const eligibleTeams = await this.getEligibleTeams(currentItem.position, minBid);
+
+    if (eligibleTeams.length !== 1) {
+      return false;
+    }
+
+    const winningTeam = eligibleTeams[0];
+    await this.processSold(currentItem, winningTeam.id, minBid);
+    await this.moveToNext();
+    this.broadcastState();
+    return true;
   }
 
   /**
@@ -554,7 +635,12 @@ class Auction {
       await this.processSold(currentItem, highTeamId, highBid);
     } else {
       // === 유찰 ===
-      await this.processUnsold(currentItem, config);
+      const result = await this.processUnsold(currentItem, config);
+      if (result?.autoAssigned) {
+        await this.moveToNext();
+        this.broadcastState();
+        return;
+      }
     }
 
     // 다음 경매 대상으로 이동
@@ -587,22 +673,13 @@ class Auction {
 
     // 4. 다음 선수 확인 - 같은 phase인지 체크
     const nextInSamePhase = await this.getNextPendingInPhase(currentPhase);
-    const config = await this.getConfig();
     
-    if (nextInSamePhase) {
-      // 같은 포지션 내에서는 최소 입찰가 유지 (유찰 카운트만 리셋)
-      await this.dbRun(`
-        UPDATE auction_state SET unsold_count = 0 WHERE id = 1
-      `);
-    } else {
-      // 다른 포지션으로 전환 시 최소 입찰가 초기화
-      await this.dbRun(`
-        UPDATE auction_state SET 
-          unsold_count = 0,
-          global_min_bid = ?
-        WHERE id = 1
-      `, [config.min_bid_start]);
-      console.log(`🔄 포지션 전환! 최소 입찰가 ${config.min_bid_start}pt로 초기화`);
+    // 포지션 전환 여부와 무관하게 유찰 카운트만 리셋
+    await this.dbRun(`
+      UPDATE auction_state SET unsold_count = 0 WHERE id = 1
+    `);
+    if (!nextInSamePhase) {
+      console.log('🔄 포지션 전환! 최소 입찰가는 유지합니다.');
     }
 
     // 5. 로그 기록
@@ -646,6 +723,161 @@ class Auction {
     await this.logEvent('ADMIN', 'UNSOLD', queueItem.id, queueItem.player_id, null, 0, queueItem.player_name, queueItem.position);
 
     console.log(`❌ 유찰! ${queueItem.player_name} → ${phase} 마지막으로 이동 (최소입찰가: ${newMinBid}pt)`);
+    return { autoAssigned: false };
+  }
+
+  async autoAssignLowPointTeam(queueItem) {
+    const state = await this.getAuctionState();
+    const minBid = state?.global_min_bid || (await this.getConfig()).min_bid_start;
+    const eligibleTeams = await this.getEligibleTeams(queueItem.position, minBid);
+    if (eligibleTeams.length > 0) {
+      return false;
+    }
+    const lowPointTeams = await this.getLowPointTeams(queueItem.position, minBid);
+
+    if (lowPointTeams.length === 0 || lowPointTeams.length >= 2) {
+      return false;
+    }
+
+    const chosenTeam = lowPointTeams[0];
+
+    const price = chosenTeam.point_now || 0;
+    await this.processSold(queueItem, chosenTeam.id, price);
+    console.log(`⚖️ 포인트 부족 자동 낙찰: ${chosenTeam.name} (${price}pt 전액)`);
+    return true;
+  }
+
+  async beginLowPointDecision(queueItem, lowPointTeams) {
+    if (this.decisionState && this.decisionState.queueId === queueItem.id) {
+      return true;
+    }
+
+    const teamOrder = this.buildDecisionOrder(lowPointTeams).map(t => t.id);
+    if (teamOrder.length < 2) {
+      return false;
+    }
+
+    this.decisionState = {
+      queueId: queueItem.id,
+      playerId: queueItem.player_id,
+      teamOrder,
+      index: 0
+    };
+
+    await this.requestDecisionForCurrentTeam(queueItem);
+    return true;
+  }
+
+  buildDecisionOrder(teams) {
+    const result = [];
+    let i = 0;
+    while (i < teams.length) {
+      const point = teams[i].point_now;
+      const group = [];
+      while (i < teams.length && teams[i].point_now === point) {
+        group.push(teams[i]);
+        i += 1;
+      }
+      for (let j = group.length - 1; j > 0; j -= 1) {
+        const k = Math.floor(Math.random() * (j + 1));
+        [group[j], group[k]] = [group[k], group[j]];
+      }
+      result.push(...group);
+    }
+    return result;
+  }
+
+  async requestDecisionForCurrentTeam(queueItem) {
+    if (!this.decisionState || !this.onDecisionRequest) return;
+    const teamId = this.decisionState.teamOrder[this.decisionState.index];
+    const team = await this.getTeamById(teamId);
+    const price = team?.point_now || 0;
+    const isLast = this.decisionState.index === this.decisionState.teamOrder.length - 1;
+    this.onDecisionRequest(teamId, {
+      queueId: queueItem.id,
+      playerId: queueItem.player_id,
+      playerName: queueItem.player_name,
+      position: queueItem.position,
+      price,
+      isLast
+    });
+  }
+
+  async handleLowPointDecision(teamId, accept) {
+    if (!this.decisionState) {
+      return { ok: false, error: '진행 중인 우선권 요청이 없습니다.' };
+    }
+
+    const expectedTeamId = this.decisionState.teamOrder[this.decisionState.index];
+    if (teamId !== expectedTeamId) {
+      return { ok: false, error: '현재 우선권 대상이 아닙니다.' };
+    }
+
+    const currentItem = await this.getCurrentQueueItem();
+    if (!currentItem || currentItem.id !== this.decisionState.queueId) {
+      this.decisionState = null;
+      return { ok: false, error: '경매 대상이 변경되었습니다.' };
+    }
+
+    const isLast = this.decisionState.index === this.decisionState.teamOrder.length - 1;
+    if (accept || isLast) {
+      const team = await this.getTeamById(teamId);
+      const price = team?.point_now || 0;
+      await this.processSold(currentItem, teamId, price);
+      this.decisionState = null;
+      await this.moveToNext();
+      this.broadcastState();
+      return { ok: true, assigned: true, forced: !accept && isLast };
+    }
+
+    this.decisionState.index += 1;
+    await this.requestDecisionForCurrentTeam(currentItem);
+    return { ok: true, assigned: false };
+  }
+
+  async forceAssignPlayerNoPay(playerId, teamId) {
+    const player = await this.dbGet('SELECT * FROM players WHERE id = ?', [playerId]);
+    if (!player) {
+      return { ok: false, error: '존재하지 않는 선수입니다.' };
+    }
+
+    const team = await this.getTeamById(teamId);
+    if (!team) {
+      return { ok: false, error: '존재하지 않는 팀입니다.' };
+    }
+
+    const existingRoster = await this.dbGet(`
+      SELECT * FROM team_roster WHERE team_id = ? AND slot = ?
+    `, [teamId, player.position]);
+
+    if (existingRoster) {
+      return { ok: false, error: `이미 ${player.position} 포지션에 선수가 있습니다.` };
+    }
+
+    const payAll = team.point_now || 0;
+    await this.dbRun(`
+      UPDATE teams SET point_now = point_now - ? WHERE id = ?
+    `, [payAll, teamId]);
+
+    await this.dbRun(`
+      INSERT INTO team_roster (team_id, slot, player_id, price_paid, acquired_via)
+      VALUES (?, ?, ?, ?, 'admin')
+    `, [teamId, player.position, playerId, payAll]);
+
+    await this.dbRun(`
+      UPDATE auction_queue SET status = 'SOLD' WHERE player_id = ?
+    `, [playerId]);
+
+    await this.logEvent('ADMIN', 'FORCE_ASSIGN', null, playerId, teamId, payAll);
+
+    const currentItem = await this.getCurrentQueueItem();
+    if (currentItem && currentItem.player_id === playerId) {
+      await this.moveToNext();
+    }
+
+    console.log(`👑 강제 배정(포인트 전액)! ${player.name} → ${team.name} (${payAll}pt)`);
+    this.broadcastState();
+    return { ok: true, playerName: player.name, teamName: team.name, price: payAll };
   }
 
   // ============================================================

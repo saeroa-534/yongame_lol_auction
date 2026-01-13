@@ -13,6 +13,7 @@ const $$ = (sel) => document.querySelectorAll(sel);
 // 상태
 let currentState = null;
 let socket = null;
+let currentQueuePhase = 'TOP';
 
 // ===== 초기화 =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -26,12 +27,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function showTeamSelect() {
   $('#teamSelect').classList.remove('hidden');
-  
-  // 임시로 T1~T6 버튼 생성
-  const teams = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
-  $('#teamSelectList').innerHTML = teams.map(t => `
-    <button class="btn btn-primary btn-lg" onclick="selectTeam('${t}')">${t}</button>
-  `).join('');
+
+  const selectSocket = io({ auth: { role: 'viewer' } });
+  const listEl = $('#teamSelectList');
+
+  selectSocket.on('connect', () => {
+    selectSocket.emit('getTeams');
+  });
+
+  selectSocket.on('teams', (teams) => {
+    if (!teams || teams.length === 0) {
+      listEl.innerHTML = '<p style="color: #72767D; text-align: center;">팀 정보 없음</p>';
+      return;
+    }
+    listEl.innerHTML = teams.map(t => `
+      <button class="btn btn-primary btn-lg" onclick="selectTeam('${t.id}')">${t.name}</button>
+    `).join('');
+  });
 }
 
 window.selectTeam = function(id) {
@@ -95,9 +107,36 @@ function setupSocketEvents() {
     showMessage(data.reason, 'error');
     showBidError(data.reason);
   });
+
+  socket.on('captain:decisionRequest', (data) => {
+    const playerLabel = `${data.playerName} (${data.position})`;
+    const promptText = data.isLast
+      ? `포인트 부족 우선권 마지막 팀입니다.\n${playerLabel}을(를) ${data.price}pt로 낙찰받습니다.`
+      : `포인트 부족 우선권입니다.\n${playerLabel}을(를) ${data.price}pt로 낙찰받겠습니까?`;
+    const accept = data.isLast ? true : window.confirm(promptText);
+    socket.emit('captain:decision', { queueId: data.queueId, accept });
+  });
+
+  socket.on('captain:decision:done', (res) => {
+    if (!res?.ok) return;
+    if (res.assigned) {
+      showMessage(res.forced ? '마지막 팀이라 자동 낙찰되었습니다.' : '낙찰 처리되었습니다.', 'info');
+    } else {
+      showMessage('우선권이 다음 팀으로 넘어갔습니다.', 'info');
+    }
+  });
 }
 
 function setupEventListeners() {
+  $$('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      $$('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentQueuePhase = tab.dataset.phase;
+      renderQueueOrder();
+    });
+  });
+
   // 빠른 입찰 버튼
   $$('.bid-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -144,6 +183,10 @@ function placeBid(price) {
     showBidError('경매가 진행 중이 아닙니다.');
     return;
   }
+  if ((currentState.currentHighBid || 0) > 0 && currentState.currentHighTeam?.teamId === teamId) {
+    showBidError('이미 최고 입찰자입니다.');
+    return;
+  }
   
   socket.emit('bid', { price });
   hideBidError();
@@ -159,6 +202,7 @@ function renderAll() {
   renderTimer();
   renderTeamsHorizontal();
   renderRecentResults();
+  renderQueueOrder();
   updateBidPanel();
   updateBidIndicator();
   
@@ -360,9 +404,46 @@ function renderAllRosters(allRosters) {
                 <img src="${imgUrl}" alt="${slot}" onerror="this.src='${emptySlotImg}'">
                 <span class="slot-label position-${slot}" style="padding: 1px 4px; border-radius: 2px;">${slot}</span>
                 <span class="player-name-mini">${player ? player.playerName : '-'}</span>
+                ${player ? `<span style="font-size: 0.65rem; color: #72767D;">${player.pricePaid}pt</span>` : ''}
               </div>
             `;
           }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderQueueOrder() {
+  const listEl = $('#queueList');
+  const progressEl = $('#queueProgress');
+  if (!listEl || !progressEl) return;
+
+  const phase = currentQueuePhase || currentState.phase || 'TOP';
+  const phaseQueue = currentState?.phaseQueueByPhase?.[phase] || currentState.phaseQueue || [];
+  const progress = currentState.phaseProgress?.[phase] || { sold: 0, total: 0 };
+
+  progressEl.textContent = `${progress.sold}/${progress.total}`;
+
+  if (phaseQueue.length === 0) {
+    listEl.innerHTML = '<p style="color: #72767D; text-align: center;">큐 정보 없음</p>';
+    return;
+  }
+
+  listEl.innerHTML = phaseQueue.map(item => {
+    const isCurrent = currentState.currentPlayer?.queueId === item.queueId;
+    const itemClass = [
+      'queue-item',
+      isCurrent ? 'current' : '',
+      item.status === 'SOLD' ? 'sold' : ''
+    ].filter(Boolean).join(' ');
+
+    return `
+      <div class="${itemClass}">
+        <div class="queue-seq">${item.sequence}</div>
+        <div style="flex: 1;">
+          <div style="color: var(--white); font-weight: 600;">${item.playerName}</div>
+          <div style="color: #72767D; font-size: 0.8rem;">${item.position}</div>
         </div>
       </div>
     `;
@@ -422,6 +503,9 @@ function canBidOnCurrentPlayer() {
   // 포인트 체크
   const minBid = currentState.globalMinBid || 5;
   if (myTeam && myTeam.pointNow < minBid) return false;
+
+  // 이미 최고 입찰자면 추가 입찰 불가
+  if ((currentState.currentHighBid || 0) > 0 && currentState.currentHighTeam?.teamId === teamId) return false;
   
   return true;
 }
@@ -449,6 +533,8 @@ function updateBidIndicator() {
     let warning = '';
     if (alreadyHas) {
       warning = `이미 ${position} 선수를 보유하고 있습니다.`;
+    } else if ((currentState.currentHighBid || 0) > 0 && currentState.currentHighTeam?.teamId === teamId) {
+      warning = '이미 최고 입찰자입니다.';
     } else {
       warning = '포인트가 부족합니다.';
     }

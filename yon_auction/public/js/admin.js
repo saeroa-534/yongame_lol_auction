@@ -18,6 +18,9 @@ let currentPhase = 'TOP';
 // ===== 초기화 =====
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
+  socket.emit('getAllRosters');
+  socket.emit('admin:getAllPlayers');
+  socket.emit('getTeams');
 });
 
 function setupEventListeners() {
@@ -38,16 +41,32 @@ function setupEventListeners() {
       socket.emit('admin:end');
     }
   });
-  $('#btnNext').addEventListener('click', () => socket.emit('admin:next'));
-  
-  // 타이머 연장
-  $('#btnExtend10').addEventListener('click', () => socket.emit('admin:extend', { seconds: 10 }));
-  $('#btnExtend30').addEventListener('click', () => socket.emit('admin:extend', { seconds: 30 }));
   
   // DB 리셋
   $('#btnReset').addEventListener('click', () => {
     if (confirm('⚠️ 정말 DB를 초기화하시겠습니까?\n모든 경매 데이터가 삭제됩니다!')) {
       socket.emit('admin:reset');
+    }
+  });
+
+  $('#btnForceAssign').addEventListener('click', () => {
+    const playerId = $('#forcePlayer').value;
+    const teamId = $('#forceTeam').value;
+
+    if (!playerId) {
+      showMessage('선수를 선택해주세요.', 'error');
+      return;
+    }
+    if (!teamId) {
+      showMessage('팀을 선택해주세요.', 'error');
+      return;
+    }
+
+    const playerName = $('#forcePlayer').selectedOptions[0].text;
+    const teamName = $('#forceTeam').selectedOptions[0].text;
+
+    if (confirm(`${playerName}을(를) ${teamName}에 포인트 전액으로 배정하시겠습니까?`)) {
+      socket.emit('admin:forceAssign', { playerId, teamId });
     }
   });
 
@@ -60,43 +79,13 @@ function setupEventListeners() {
       renderQueue();
     });
   });
-
-  // 강제 배정 버튼
-  $('#btnForceAssign').addEventListener('click', () => {
-    const playerId = $('#forcePlayer').value;
-    const teamId = $('#forceTeam').value;
-    const price = parseInt($('#forcePrice').value);
-
-    if (!playerId) {
-      showMessage('선수를 선택해주세요.', 'error');
-      return;
-    }
-    if (!teamId) {
-      showMessage('팀을 선택해주세요.', 'error');
-      return;
-    }
-    if (isNaN(price) || price < 0) {
-      showMessage('올바른 가격을 입력해주세요.', 'error');
-      return;
-    }
-
-    const playerName = $('#forcePlayer').selectedOptions[0].text;
-    const teamName = $('#forceTeam').selectedOptions[0].text;
-
-    if (confirm(`${playerName}을(를) ${teamName}에 ${price}pt로 배정하시겠습니까?`)) {
-      socket.emit('admin:forceAssign', { playerId, teamId, price });
-    }
-  });
-
-  // 강제 배정용 선수/팀 목록 요청
-  socket.emit('admin:getAllPlayers');
-  socket.emit('getTeams');
 }
 
 // ===== Socket 이벤트 =====
 socket.on('connect', () => {
   console.log('✅ 서버 연결됨');
   showMessage('서버에 연결되었습니다.', 'success');
+  socket.emit('getAllRosters');
 });
 
 socket.on('disconnect', () => {
@@ -108,11 +97,24 @@ socket.on('state', (state) => {
   console.log('📦 상태 수신:', state);
   currentState = state;
   renderAll();
+  if (state?.allRosters) {
+    renderAdminRosters(state.allRosters);
+  } else {
+    socket.emit('getAllRosters');
+  }
 });
 
 socket.on('admin:start:done', (res) => {
   if (res.ok) {
-    showMessage('경매가 시작되었습니다!', 'success');
+    if (res.pendingAdminAssign) {
+      showMessage('입찰 가능한 팀이 없습니다. 관리자 배정이 필요합니다.', 'info');
+    } else if (res.pendingDecision) {
+      showMessage('포인트 부족 우선권 요청 중입니다.', 'info');
+    } else if (res.autoAssigned) {
+      showMessage('자동 낙찰 처리되었습니다. 다음 경매를 시작하려면 다시 누르세요.', 'info');
+    } else {
+      showMessage('경매가 시작되었습니다!', 'success');
+    }
   } else {
     showMessage(res.error, 'error');
   }
@@ -138,19 +140,16 @@ socket.on('admin:reset:done', (res) => {
   showMessage(res.ok ? 'DB가 초기화되었습니다!' : res.error, res.ok ? 'success' : 'error');
 });
 
-socket.on('admin:next:done', (res) => {
-  if (!res.ok) {
-    showMessage(res.error, 'error');
-  } else if (!res.hasNext) {
-    showMessage('모든 경매가 완료되었습니다!', 'info');
-  }
+
+socket.on('allRosters', (data) => {
+  renderAdminRosters(data);
 });
 
-// 강제 배정용 선수 목록 수신
 socket.on('admin:allPlayers', (players) => {
   const select = $('#forcePlayer');
+  if (!select) return;
   select.innerHTML = '<option value="">선수 선택...</option>';
-  
+
   players.forEach(p => {
     const assigned = p.is_assigned > 0;
     const opt = document.createElement('option');
@@ -161,11 +160,11 @@ socket.on('admin:allPlayers', (players) => {
   });
 });
 
-// 강제 배정용 팀 목록 수신
 socket.on('teams', (teams) => {
   const select = $('#forceTeam');
+  if (!select) return;
   select.innerHTML = '<option value="">팀 선택...</option>';
-  
+
   teams.forEach(t => {
     const opt = document.createElement('option');
     opt.value = t.id;
@@ -174,17 +173,11 @@ socket.on('teams', (teams) => {
   });
 });
 
-// 강제 배정 결과
 socket.on('admin:forceAssign:done', (res) => {
   if (res.ok) {
-    showMessage(`${res.playerName}이(가) ${res.teamName}에 ${res.price}pt로 배정되었습니다!`, 'success');
-    // 목록 새로고침
+    showMessage(`${res.playerName}이(가) ${res.teamName}에 포인트 전액으로 배정되었습니다.`, 'success');
     socket.emit('admin:getAllPlayers');
     socket.emit('getTeams');
-    // 입력 초기화
-    $('#forcePlayer').value = '';
-    $('#forceTeam').value = '';
-    $('#forcePrice').value = '';
   } else {
     showMessage(res.error, 'error');
   }
@@ -197,10 +190,48 @@ function renderAll() {
   renderCurrentPlayer();
   renderBidInfo();
   renderTimer();
-  renderTeams();
   renderQueue();
   renderResults();
   updateButtons();
+}
+
+function renderAdminRosters(allRosters) {
+  const container = $('#adminAllRosters');
+  if (!container || !allRosters) return;
+
+  const slots = ['TOP', 'JUG', 'MID', 'ADC', 'SUP'];
+  const teams = Object.values(allRosters);
+
+  if (teams.length === 0) {
+    container.innerHTML = '<p style="color: #72767D; text-align: center;">팀 정보 없음</p>';
+    return;
+  }
+
+  container.innerHTML = teams.map(teamData => {
+    const rosterBySlot = {};
+    teamData.roster.forEach(r => { rosterBySlot[r.slot] = r; });
+
+    return `
+      <div class="queue-item" style="flex-direction: column; align-items: stretch; gap: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="color: var(--white); font-weight: 700;">${teamData.team.name}</span>
+          <span style="color: var(--warning); font-size: 0.85rem;">${teamData.team.pointNow}pt</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;">
+          ${slots.map(slot => {
+            const player = rosterBySlot[slot];
+            return `
+              <div style="background: var(--darker); padding: 6px; border-radius: 6px; text-align: center;">
+                <div class="position-${slot}" style="font-size: 0.65rem; font-weight: 700;">${slot}</div>
+                <div style="font-size: 0.7rem; color: var(--white);">${player ? player.playerName : '-'}</div>
+                ${player ? `<div style=\"font-size: 0.65rem; color: #72767D;\">${player.pricePaid}pt</div>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderCurrentPlayer() {
@@ -290,24 +321,6 @@ function updateTimerDisplay() {
 
 // 타이머 업데이트 (200ms 간격)
 setInterval(updateTimerDisplay, 200);
-
-function renderTeams() {
-  const container = $('#teamList');
-  if (!currentState.teams) return;
-  
-  container.innerHTML = currentState.teams.map(team => {
-    const isCurrent = currentState.currentHighTeam?.teamId === team.id;
-    return `
-      <div class="card team-item ${isCurrent ? 'current-bidder-team' : ''}" style="margin: 0;">
-        <div>
-          <div class="team-name">${team.name}</div>
-          <div style="font-size: 0.85rem; color: #72767D;">팀장: ${team.captainName}</div>
-        </div>
-        <div class="team-points">${team.pointNow} pt</div>
-      </div>
-    `;
-  }).join('');
-}
 
 function renderQueue() {
   const container = $('#queueList');

@@ -119,11 +119,13 @@
         <p>경매를 시작하고 관리합니다.<br>선수 선택, 타이머 제어 등</p>
       </a>
       
-      <a href="/captain.html" class="nav-card">
+      <div class="nav-card">
         <div class="icon">🏆</div>
-        <h2>팀장</h2>
-        <p>선수에게 입찰합니다.<br>팀 로스터 관리</p>
-      </a>
+        <h2>팀장으로 접속하기</h2>
+        <div class="grid grid-3" id="teamLinks" style="gap: 10px; margin-top: 15px;">
+          <!-- 팀 링크가 여기에 생성 -->
+        </div>
+      </div>
       
       <a href="/viewer.html" class="nav-card">
         <div class="icon">👀</div>
@@ -151,13 +153,6 @@
       </div>
     </div>
 
-    <!-- Team Selection for Captain -->
-    <div class="card mt-20">
-      <h3 class="card-title">🏆 팀장으로 접속하기</h3>
-      <div class="grid grid-3" id="teamLinks" style="gap: 10px;">
-        <!-- 팀 링크가 여기에 생성 -->
-      </div>
-    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>

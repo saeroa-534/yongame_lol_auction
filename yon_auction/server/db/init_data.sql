@@ -32,7 +32,7 @@ INSERT INTO players (id, name, position, tier, bio, img_url, is_captain) VALUES
 -- 팀장(정글) 6명
 ('P_JUG_01','구효성','JUG','DIAMOND','정글 Baby 입니다.','/assets/img_players/구효성.webp',1),
 ('P_JUG_02','김정우','JUG','EMERALD','이x끼는 그냥 롤을 잘함','/assets/img_players/김정우.webp',1),
-('P_JUG_03','김태현','JUG','EMERALD','좀 더 조숙해진 정글러','/assets/img_players/김태현.webp',1),
+('P_JUG_03','김태현','JUG','EMERALD','좀 더 조숙해진 정글러','/assets/img_players/김태현02.webp',1),
 ('P_JUG_04','심지민','JUG','DIAMOND','요청하는 모든메뉴 가능','/assets/img_players/심지민.webp',1),
 ('P_JUG_05','홍성원','JUG','EMERALD','연낳대 최초 유일 로열로더 투핏','/assets/img_players/홍성원.webp',1),
 ('P_JUG_06','황동근','JUG','EMERALD','3회 우승하고 졸업하겠습니다.','/assets/img_players/황동근.webp',1),
@@ -72,12 +72,12 @@ INSERT INTO players (id, name, position, tier, bio, img_url, is_captain) VALUES
 -- 2) teams (6팀, name UNIQUE)
 -- =========================================================
 INSERT INTO teams (id, name, captain_player_id, point_now) VALUES
-('T1','구효성','P_JUG_01',1000),
-('T2','김정우','P_JUG_02',1000),
-('T3','김태현','P_JUG_03',1000),
-('T4','심지민','P_JUG_04',1000),
-('T5','홍성원','P_JUG_05',1000),
-('T6','황동근','P_JUG_06',1000);
+('T1','팀_구효성','P_JUG_01',1000),
+('T2','팀_김정우','P_JUG_02',1000),
+('T3','팀_김태현','P_JUG_03',1000),
+('T4','팀_심지민','P_JUG_04',1000),
+('T5','팀_홍성원','P_JUG_05',1000),
+('T6','팀_황동근','P_JUG_06',1000);
 
 -- =========================================================
 -- 3) team_roster (팀장들은 JUG 슬롯에 미리 포함)
@@ -143,7 +143,7 @@ INSERT OR REPLACE INTO auction_state (
   'Q_TOP_01',
   'P_TOP_01',
   0,
-  'T1',
+  NULL,
   5,
   0
 );

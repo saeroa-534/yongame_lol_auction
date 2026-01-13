@@ -348,6 +348,7 @@ select:focus {
   flex-direction: column;
   gap: 8px;
   max-height: 400px;
+  min-height: 110px;
   overflow-y: auto;
 }
 

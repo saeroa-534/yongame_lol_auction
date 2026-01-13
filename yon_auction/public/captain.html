@@ -178,6 +178,49 @@
       overflow-x: auto;
       padding: 5px 0;
     }
+
+    .queue-row {
+      display: flex;
+      gap: 10px;
+      min-height: 0;
+      align-items: flex-start;
+      min-width: 0;
+    }
+
+    .queue-tabs-vertical {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--darker);
+      padding: 6px;
+      border-radius: 8px;
+      min-width: 70px;
+      height: fit-content;
+    }
+
+    .queue-tabs-vertical .tab {
+      flex: none;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+    }
+
+    .queue-list.horizontal {
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 6px;
+      max-height: 200px;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .queue-list.horizontal .queue-item {
+      min-width: 160px;
+      flex: 0 0 auto;
+    }
     
     .team-chip {
       display: flex;
@@ -449,9 +492,9 @@
         <div class="card bid-panel" id="bidPanel">
           <div class="bid-quick-buttons">
             <button class="btn btn-primary bid-btn" data-amount="min">최소</button>
-            <button class="btn btn-primary bid-btn" data-amount="+5">+5</button>
             <button class="btn btn-primary bid-btn" data-amount="+10">+10</button>
-            <button class="btn btn-warning bid-btn" data-amount="+50">+50</button>
+            <button class="btn btn-primary bid-btn" data-amount="+15">+15</button>
+            <button class="btn btn-warning bid-btn" data-amount="+20">+20</button>
           </div>
           <div class="custom-bid">
             <input type="number" id="customBidInput" placeholder="직접 입력" min="0" step="5">
@@ -471,13 +514,26 @@
       <!-- 오른쪽: 정보 섹션 -->
       <div class="info-section">
         <!-- 낙찰/유찰 전체 기록 - 비율 1 -->
-        <div class="card" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+        <div class="card" style="display: flex; flex-direction: column; max-height: 260px;">
           <h3 class="card-title">🏆 낙찰/유찰 기록</h3>
           <div id="recentResults" class="recent-results" style="flex: 1; overflow-y: auto;"></div>
         </div>
 
+        <!-- 경매 순서 -->
+        <div class="card" style="display: flex; flex-direction: column; max-height: 260px;">
+          <h3 class="card-title">📋 경매 순서 <span id="queueProgress" style="float:right; font-size: 0.9rem; color: #72767D;">0/0</span></h3>
+          <div class="queue-row" style="flex: 1; min-height: 0;">
+            <div class="queue-tabs-vertical">
+              <button class="tab active" data-phase="TOP">TOP</button>
+              <button class="tab" data-phase="MID">MID</button>
+              <button class="tab" data-phase="BOTTOM">BOTTOM</button>
+            </div>
+            <div id="queueList" class="queue-list horizontal" style="flex: 1;"></div>
+          </div>
+        </div>
+
         <!-- 전체 팀 로스터 - 비율 2 -->
-        <div class="card" style="flex: 2; display: flex; flex-direction: column; min-height: 0;">
+        <div class="card" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
           <h3 class="card-title">📊 전체 팀 로스터</h3>
           <div id="allRosters" class="all-rosters-grid" style="flex: 1; overflow-y: auto;"></div>
         </div>

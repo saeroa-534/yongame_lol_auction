@@ -13,6 +13,7 @@ const $$ = (sel) => document.querySelectorAll(sel);
 
 // 상태
 let currentState = null;
+let currentQueuePhase = 'TOP';
 
 // ===== Socket 이벤트 =====
 socket.on('connect', () => {
@@ -46,7 +47,18 @@ function renderAll() {
   renderBidInfo();
   renderTimer();
   renderRecentResults();
+  renderQueueOrder();
 }
+
+// Queue 탭 클릭
+$$('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    $$('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentQueuePhase = tab.dataset.phase;
+    renderQueueOrder();
+  });
+});
 
 function renderPhaseIndicator() {
   const currentPhase = currentState.phase || 'TOP';
@@ -183,6 +195,42 @@ function renderRecentResults() {
       </div>
     `;
   }).join('') || '<p style="text-align: center; color: #72767D; font-size: 0.8rem;">아직 낙찰 없음</p>';
+}
+
+function renderQueueOrder() {
+  const listEl = $('#queueList');
+  const progressEl = $('#queueProgress');
+  if (!listEl || !progressEl) return;
+
+  const phase = currentQueuePhase || currentState.phase || 'TOP';
+  const phaseQueue = currentState?.phaseQueueByPhase?.[phase] || currentState.phaseQueue || [];
+  const progress = currentState.phaseProgress?.[phase] || { sold: 0, total: 0 };
+
+  progressEl.textContent = `${progress.sold}/${progress.total}`;
+
+  if (phaseQueue.length === 0) {
+    listEl.innerHTML = '<p style="color: #72767D; text-align: center;">큐 정보 없음</p>';
+    return;
+  }
+
+  listEl.innerHTML = phaseQueue.map(item => {
+    const isCurrent = currentState.currentPlayer?.queueId === item.queueId;
+    const itemClass = [
+      'queue-item',
+      isCurrent ? 'current' : '',
+      item.status === 'SOLD' ? 'sold' : ''
+    ].filter(Boolean).join(' ');
+
+    return `
+      <div class="${itemClass}">
+        <div class="queue-seq">${item.sequence}</div>
+        <div style="flex: 1;">
+          <div style="color: var(--white); font-weight: 600;">${item.playerName}</div>
+          <div style="color: #72767D; font-size: 0.8rem;">${item.position}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 /**
